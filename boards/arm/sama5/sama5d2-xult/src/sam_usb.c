@@ -1,5 +1,5 @@
 /****************************************************************************
- *  boards/arm/sama5/sama5d2-xult/src/sam_usb.c
+ * boards/arm/sama5/sama5d2-xult/src/sam_usb.c
  *
  *  Licensed to the Apache Software Foundation (ASF) under one or more
  *  contributor license agreements.  See the NOTICE file distributed with
@@ -38,7 +38,7 @@
 #include <nuttx/usb/usbhost.h>
 #include <nuttx/usb/usbdev_trace.h>
 
-#include "up_arch.h"
+#include "arm_arch.h"
 #include "sam_pio.h"
 #include "sam_usbhost.h"
 #include "hardware/sam_ohci.h"

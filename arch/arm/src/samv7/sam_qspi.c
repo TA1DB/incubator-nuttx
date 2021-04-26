@@ -1,35 +1,20 @@
 /****************************************************************************
  * arch/arm/src/samv7/sam_qspi.c
  *
- *   Copyright (C) 2015, 2017, 2019 Gregory Nutt. All rights reserved.
- *   Authors: Gregory Nutt <gnutt@nuttx.org>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -57,8 +42,8 @@
 #include <nuttx/semaphore.h>
 #include <nuttx/spi/qspi.h>
 
-#include "up_internal.h"
-#include "up_arch.h"
+#include "arm_internal.h"
+#include "arm_arch.h"
 #include "barriers.h"
 
 #include "sam_gpio.h"
@@ -192,7 +177,7 @@ struct sam_qspidev_s
   uint8_t rxintf;              /* RX hardware interface number */
   uint8_t txintf;              /* TX hardware interface number */
   sem_t dmawait;               /* Used to wait for DMA completion */
-  WDOG_ID dmadog;              /* Watchdog that handles DMA timeouts */
+  struct wdog_s dmadog;        /* Watchdog that handles DMA timeouts */
   int result;                  /* DMA result */
   DMA_HANDLE dmach;            /* QSPI DMA handle */
 #endif
@@ -578,8 +563,7 @@ static void qspi_dma_sampledone(struct sam_qspidev_s *priv)
  *   DMA.
  *
  * Input Parameters:
- *   argc   - The number of arguments (should be 1)
- *   arg    - The argument (state structure reference cast to uint32_t)
+ *   arg    - The argument
  *
  * Returned Value:
  *   None
@@ -590,7 +574,7 @@ static void qspi_dma_sampledone(struct sam_qspidev_s *priv)
  ****************************************************************************/
 
 #ifdef CONFIG_SAMV7_QSPI_DMA
-static void qspi_dma_timeout(int argc, uint32_t arg, ...)
+static void qspi_dma_timeout(wdparm_t arg)
 {
   struct sam_qspidev_s *priv = (struct sam_qspidev_s *)arg;
   DEBUGASSERT(priv != NULL);
@@ -635,7 +619,7 @@ static void qspi_dma_callback(DMA_HANDLE handle, void *arg, int result)
 
   /* Cancel the watchdog timeout */
 
-  wd_cancel(priv->dmadog);
+  wd_cancel(&priv->dmadog);
 
   /* Sample DMA registers at the time of the callback */
 
@@ -890,8 +874,8 @@ static int qspi_memory_dma(struct sam_qspidev_s *priv,
     {
       /* Start (or re-start) the watchdog timeout */
 
-      ret = wd_start(priv->dmadog, DMA_TIMEOUT_TICKS,
-                     qspi_dma_timeout, 1, (uint32_t)priv);
+      ret = wd_start(&priv->dmadog, DMA_TIMEOUT_TICKS,
+                     qspi_dma_timeout, (wdparm_t)priv);
       if (ret < 0)
         {
            spierr("ERROR: wd_start failed: %d\n", ret);
@@ -903,7 +887,7 @@ static int qspi_memory_dma(struct sam_qspidev_s *priv,
 
       /* Cancel the watchdog timeout */
 
-      wd_cancel(priv->dmadog);
+      wd_cancel(&priv->dmadog);
 
       /* Check if we were awakened by an error of some kind. */
 
@@ -1282,7 +1266,7 @@ static void qspi_setmode(struct qspi_dev_s *dev, enum qspi_mode_e mode)
  *
  * Input Parameters:
  *   dev -  Device-specific state data
- *   nbits - The number of bits requests
+ *   nbits - The number of bits requested
  *
  * Returned Value:
  *   none
@@ -1311,8 +1295,8 @@ static void qspi_setbits(struct qspi_dev_s *dev, int nbits)
 
       spiinfo("MR=%08x\n", regval);
 
-      /* Save the selection so the subsequence re-configurations will be
-       * faster
+      /* Save the selection so that subsequent re-configurations will be
+       * faster.
        */
 
       priv->nbits = nbits;
@@ -1797,16 +1781,7 @@ struct qspi_dev_s *sam_qspi_initialize(int intf)
        */
 
       nxsem_init(&priv->dmawait, 0, 0);
-      nxsem_setprotocol(&priv->dmawait, SEM_PRIO_NONE);
-
-      /* Create a watchdog time to catch DMA timeouts */
-
-      priv->dmadog = wd_create();
-      if (priv->dmadog == NULL)
-        {
-          spierr("ERROR: Failed to create wdog\n");
-          goto errout_with_dmahandles;
-        }
+      nxsem_set_protocol(&priv->dmawait, SEM_PRIO_NONE);
 #endif
 
 #ifdef QSPI_USE_INTERRUPTS
@@ -1816,7 +1791,7 @@ struct qspi_dev_s *sam_qspi_initialize(int intf)
       if (ret < 0)
         {
           spierr("ERROR: Failed to attach irq %d\n", priv->irq);
-          goto errout_with_dmadog;
+          goto errout_with_dmawait;
         }
 #endif
 
@@ -1845,14 +1820,10 @@ errout_with_irq:
 #ifdef QSPI_USE_INTERRUPTS
   irq_detach(priv->irq);
 
-errout_with_dmadog:
+errout_with_dmawait:
 #endif
 #ifdef CONFIG_SAMV7_QSPI_DMA
-  wd_delete(priv->dmadog);
-
-errout_with_dmahandles:
   nxsem_destroy(&priv->dmawait);
-
   if (priv->dmach)
     {
       sam_dmafree(priv->dmach);

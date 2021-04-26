@@ -47,8 +47,8 @@
  *    or sink pipe file structures before each file_read() or file_write()
  *    operation to assure that the O_NONBLOCK is set correctly when the
  *    pipe read or write operation is performed.  This might be done with
- *    file_vfcntl() (there is no file_fcntl(), yet) or directly into the
- *    source/sink file structure oflags mode settings.
+ *    file_fcntl() or directly into the source/sink file structure oflags
+ *    mode settings.
  *
  *    This would require (1) the ability to lock each pipe individually,
  *    setting the blocking mode for the source or sink pipe to match the
@@ -83,7 +83,6 @@
 #include <nuttx/kmalloc.h>
 #include <nuttx/semaphore.h>
 #include <nuttx/fs/fs.h>
-#include <nuttx/drivers/drivers.h>
 #include <nuttx/serial/pty.h>
 
 #include "pty.h"
@@ -292,7 +291,9 @@ static int pty_open(FAR struct file *filep)
       sched_lock();
       while (devpair->pp_locked)
         {
-          /* Wait until unlocked.  We will also most certainly suspend here. */
+          /* Wait until unlocked.
+           * We will also most certainly suspend here.
+           */
 
           ret = nxsem_wait(&devpair->pp_slavesem);
           if (ret < 0)
@@ -548,7 +549,7 @@ static ssize_t pty_read(FAR struct file *filep, FAR char *buffer, size_t len)
                *
                * REVISIT: Should not block if the oflags include O_NONBLOCK.
                * How would we ripple the O_NONBLOCK characteristic to the
-               * contained source pipe?  file_vfcntl()?  Or FIONREAD? See the
+               * contained source pipe?  file_fcntl()?  Or FIONREAD? See the
                * TODO comment at the top of this file.
                */
 
@@ -601,7 +602,7 @@ static ssize_t pty_read(FAR struct file *filep, FAR char *buffer, size_t len)
        *
        * REVISIT: Should not block if the oflags include O_NONBLOCK.
        * How would we ripple the O_NONBLOCK characteristic to the
-       * contained source pipe? file_vfcntl()?  Or FIONREAD?  See the
+       * contained source pipe? file_fcntl()?  Or FIONREAD?  See the
        * TODO comment at the top of this file.
        */
 
@@ -669,8 +670,12 @@ static ssize_t pty_write(FAR struct file *filep,
                *
                * REVISIT: Should not block if the oflags include O_NONBLOCK.
                * How would we ripple the O_NONBLOCK characteristic to the
-               * contained sink pipe?  file_vfcntl()?  Or FIONSPACE?  See the
+               * contained sink pipe?  file_fcntl()?  Or FIONSPACE?  See the
                * TODO comment at the top of this file.
+               *
+               * NOTE: The newline is not included in total number of bytes
+               * written.  Otherwise, we would return more than the
+               * requested number of bytes.
                */
 
               nwritten = file_write(&dev->pd_sink, &cr, 1);
@@ -679,10 +684,6 @@ static ssize_t pty_write(FAR struct file *filep,
                   ntotal = nwritten;
                   break;
                 }
-
-              /* Update the count of bytes transferred */
-
-              ntotal++;
             }
 
           /* Transfer the (possibly translated) character..  This will block
@@ -690,7 +691,7 @@ static ssize_t pty_write(FAR struct file *filep,
            *
            * REVISIT: Should not block if the oflags include O_NONBLOCK.
            * How would we ripple the O_NONBLOCK characteristic to the
-           * contained sink pipe?  file_vfcntl()?  Or FIONSPACe?  See the
+           * contained sink pipe?  file_fcntl()?  Or FIONSPACe?  See the
            * TODO comment at the top of this file.
            */
 
@@ -714,7 +715,7 @@ static ssize_t pty_write(FAR struct file *filep,
        *
        * REVISIT: Should not block if the oflags include O_NONBLOCK.
        * How would we ripple the O_NONBLOCK characteristic to the
-       * contained sink pipe?  file_vfcntl()?  Or FIONSPACE?  See the
+       * contained sink pipe?  file_fcntl()?  Or FIONSPACE?  See the
        * TODO comment at the top of this file.
        */
 
@@ -793,7 +794,8 @@ static int pty_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
                do
                  {
-                   DEBUGVERIFY(nxsem_getvalue(&devpair->pp_slavesem, &sval));
+                   DEBUGVERIFY(nxsem_get_value(&devpair->pp_slavesem,
+                                               &sval));
                    if (sval < 0)
                      {
                        nxsem_post(&devpair->pp_slavesem);
@@ -966,7 +968,7 @@ static int pty_poll(FAR struct file *filep, FAR struct pollfd *fds,
       pollp = (FAR struct pty_poll_s *)fds->priv;
     }
 
-  /* POLLIN: Data other than high-priority data may be read without blocking. */
+  /* POLLIN: Data may be read without blocking. */
 
   if ((fds->events & POLLIN) != 0)
     {
@@ -1070,16 +1072,16 @@ static int pty_unlink(FAR struct inode *inode)
  *   minor - The number that qualifies the naming of the created devices.
  *
  * Returned Value:
- *   Zero (OK) is returned on success; a negated errno value is returned on
- *   any failure.
+ *   0 is returned on success; otherwise, the negative error code return
+ *   appropriately.
  *
  ****************************************************************************/
 
 int pty_register(int minor)
 {
   FAR struct pty_devpair_s *devpair;
-  int pipe_a[2];
-  int pipe_b[2];
+  FAR struct file *pipe_a[2];
+  FAR struct file *pipe_b[2];
   char devname[16];
   int ret;
 
@@ -1100,7 +1102,7 @@ int pty_register(int minor)
    * have priority inheritance enabled.
    */
 
-  nxsem_setprotocol(&devpair->pp_slavesem, SEM_PRIO_NONE);
+  nxsem_set_protocol(&devpair->pp_slavesem, SEM_PRIO_NONE);
 
 #ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
   devpair->pp_minor             = minor;
@@ -1116,55 +1118,23 @@ int pty_register(int minor)
    *   pipe_b:  Master sink, slave source (RX, master-to-slave)
    */
 
-  ret = pipe2(pipe_a, CONFIG_PSEUDOTERM_TXBUFSIZE);
+  pipe_a[0] = &devpair->pp_master.pd_src;
+  pipe_a[1] = &devpair->pp_slave.pd_sink;
+
+  ret = file_pipe(pipe_a, CONFIG_PSEUDOTERM_TXBUFSIZE, 0);
   if (ret < 0)
     {
       goto errout_with_devpair;
     }
 
-  ret = pipe2(pipe_b, CONFIG_PSEUDOTERM_RXBUFSIZE);
+  pipe_b[0] = &devpair->pp_slave.pd_src;
+  pipe_b[1] = &devpair->pp_master.pd_sink;
+
+  ret = file_pipe(pipe_b, CONFIG_PSEUDOTERM_RXBUFSIZE, 0);
   if (ret < 0)
     {
       goto errout_with_pipea;
     }
-
-  /* Detach the pipe file descriptors (closing them in the process)
-   *
-   *  fd[0] is for reading;
-   *  fd[1] is for writing.
-   */
-
-  ret = file_detach(pipe_a[0], &devpair->pp_master.pd_src);
-  if (ret < 0)
-    {
-      goto errout_with_pipeb;
-    }
-
-  pipe_a[0] = -1;
-
-  ret = file_detach(pipe_a[1], &devpair->pp_slave.pd_sink);
-  if (ret < 0)
-    {
-      goto errout_with_pipeb;
-    }
-
-  pipe_a[1] = -1;
-
-  ret = file_detach(pipe_b[0], &devpair->pp_slave.pd_src);
-  if (ret < 0)
-    {
-      goto errout_with_pipeb;
-    }
-
-  pipe_b[0] = -1;
-
-  ret = file_detach(pipe_b[1], &devpair->pp_master.pd_sink);
-  if (ret < 0)
-    {
-      goto errout_with_pipeb;
-    }
-
-  pipe_b[1] = -1;
 
   /* Register the slave device
    *
@@ -1213,42 +1183,12 @@ errout_with_slave:
   unregister_driver(devname);
 
 errout_with_pipeb:
-  if (pipe_b[0] >= 0)
-    {
-      close(pipe_b[0]);
-    }
-  else
-    {
-      file_close(&devpair->pp_master.pd_src);
-    }
-
-  if (pipe_b[1] >= 0)
-    {
-      close(pipe_b[1]);
-    }
-  else
-    {
-      file_close(&devpair->pp_slave.pd_sink);
-    }
+  file_close(pipe_b[0]);
+  file_close(pipe_b[1]);
 
 errout_with_pipea:
-  if (pipe_a[0] >= 0)
-    {
-      close(pipe_a[0]);
-    }
-  else
-    {
-      file_close(&devpair->pp_slave.pd_src);
-    }
-
-  if (pipe_a[1] >= 0)
-    {
-      close(pipe_a[1]);
-    }
-  else
-    {
-      file_close(&devpair->pp_master.pd_sink);
-    }
+  file_close(pipe_a[0]);
+  file_close(pipe_a[1]);
 
 errout_with_devpair:
   nxsem_destroy(&devpair->pp_exclsem);

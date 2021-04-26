@@ -44,8 +44,8 @@
 #include <string.h>
 
 #include <nuttx/kmalloc.h>
-#include <nuttx/i2c/i2c_master.h>
-#include <nuttx/drivers/1wire.h>
+#include <nuttx/1wire/1wire_master.h>
+#include <nuttx/1wire/1wire.h>
 
 #include "1wire_internal.h"
 
@@ -193,7 +193,7 @@ static int onewire_pm_prepare(FAR struct pm_callback_s *cb, int domain,
 
       /* Check if exclusive lock for the bus master is held. */
 
-      if (nxsem_getvalue(&master->devsem.sem, &sval) < 0)
+      if (nxsem_get_value(&master->devsem.sem, &sval) < 0)
         {
           DEBUGASSERT(false);
           return -EINVAL;
@@ -201,7 +201,9 @@ static int onewire_pm_prepare(FAR struct pm_callback_s *cb, int domain,
 
       if (sval <= 0)
         {
-          /* Exclusive lock is held, do not allow entry to deeper PM states. */
+          /* Exclusive lock is held, do not allow entry to deeper PM
+           * states.
+           */
 
           return -EBUSY;
         }
@@ -328,9 +330,9 @@ int onewire_reset_resume(FAR struct onewire_master_s *master)
  *
  ****************************************************************************/
 
-int onewire_reset_select(FAR struct onewire_slave_s *slave)
+int onewire_reset_select(FAR struct onewire_master_s *master,
+                         uint64_t romcode)
 {
-  FAR struct onewire_master_s *master = slave->master;
   uint64_t tmp;
   uint8_t skip_rom[1] =
   {
@@ -352,13 +354,13 @@ int onewire_reset_select(FAR struct onewire_slave_s *slave)
 
   /* Issue skip-ROM if single slave, match-ROM otherwise. */
 
-  if (master->nslaves == 1)
+  if (master->nslaves == 1 || master->maxslaves == 1)
     {
       ret = ONEWIRE_WRITE(master->dev, skip_rom, sizeof(skip_rom));
     }
   else
     {
-      tmp = onewire_leuint64(slave->romcode);
+      tmp = onewire_leuint64(romcode);
       memcpy(&match_rom[1], &tmp, 8);
       ret = ONEWIRE_WRITE(master->dev, match_rom, sizeof(match_rom));
     }
@@ -539,6 +541,14 @@ int onewire_search(FAR struct onewire_master_s *master,
 
   DEBUGASSERT(master->insearch == false);
 
+  /* Make complete search on the bus mutal exlusive */
+
+  ret = onewire_sem_wait(master);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
   /* Skip costly search if bus supports only a single slave. */
 
   if (master->maxslaves == 1)
@@ -552,7 +562,7 @@ int onewire_search(FAR struct onewire_master_s *master,
           nslaves_match++;
         }
 
-      return (ret < 0) ? ret : nslaves_match;
+      goto unlock;
     }
 
   /* Select search type. */
@@ -568,7 +578,7 @@ int onewire_search(FAR struct onewire_master_s *master,
       ret = ONEWIRE_RESET(dev);
       if (ret < 0)
         {
-          return ret;
+          goto unlock;
         }
 
       /* Send the Search-ROM command. */
@@ -576,7 +586,7 @@ int onewire_search(FAR struct onewire_master_s *master,
       ret = ONEWIRE_WRITE(dev, cmd, sizeof(cmd));
       if (ret < 0)
         {
-          return ret;
+          goto unlock;
         }
 
       last_rom = rom;
@@ -609,7 +619,7 @@ int onewire_search(FAR struct onewire_master_s *master,
             {
               /* Error or zero valid directions. */
 
-              return ret;
+              goto unlock;
             }
 
           if (ret == 2 && taken_bit == 0)
@@ -666,7 +676,9 @@ int onewire_search(FAR struct onewire_master_s *master,
        */
     }
 
-  return nslaves_match;
+unlock:
+  onewire_sem_post(master);
+  return (ret < 0) ? ret : nslaves_match;
 }
 
 /****************************************************************************
@@ -727,7 +739,7 @@ int onewire_removeslave(FAR struct onewire_master_s *master,
  ****************************************************************************/
 
 FAR struct onewire_master_s *
-  onewire_initialize(FAR struct onewire_dev_s *dev, int maxslaves)
+onewire_initialize(FAR struct onewire_dev_s *dev, int maxslaves)
 {
   FAR struct onewire_master_s *master;
 

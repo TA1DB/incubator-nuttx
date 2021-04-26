@@ -1,35 +1,20 @@
 /****************************************************************************
  * arch/xtensa/src/common/xtensa_cpupause.c
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -55,8 +40,8 @@
  * Private Data
  ****************************************************************************/
 
-static spinlock_t g_cpu_wait[CONFIG_SMP_NCPUS] SP_SECTION;
-static spinlock_t g_cpu_paused[CONFIG_SMP_NCPUS] SP_SECTION;
+static spinlock_t g_cpu_wait[CONFIG_SMP_NCPUS];
+static spinlock_t g_cpu_paused[CONFIG_SMP_NCPUS];
 
 /****************************************************************************
  * Public Functions
@@ -72,7 +57,7 @@ static spinlock_t g_cpu_paused[CONFIG_SMP_NCPUS] SP_SECTION;
  *   cpu - The index of the CPU to be queried
  *
  * Returned Value:
- *   true   = a pause request is pending.
+ *   true  = a pause request is pending.
  *   false = no pasue request is pending.
  *
  ****************************************************************************/
@@ -88,9 +73,9 @@ bool up_cpu_pausereq(int cpu)
  * Description:
  *   Handle a pause request from another CPU.  Normally, this logic is
  *   executed from interrupt handling logic within the architecture-specific
- *   However, it is sometimes necessary necessary to perform the pending
- *   pause operation in other contexts where the interrupt cannot be taken
- *   in order to avoid deadlocks.
+ *   However, it is sometimes necessary to perform the pending pause
+ *   operation in other contexts where the interrupt cannot be taken in
+ *   order to avoid deadlocks.
  *
  *   This function performs the following operations:
  *
@@ -115,7 +100,7 @@ int up_cpu_paused(int cpu)
 
   /* Update scheduler parameters */
 
-  sched_suspend_scheduler(tcb);
+  nxsched_suspend_scheduler(tcb);
 
 #ifdef CONFIG_SCHED_INSTRUMENTATION
   /* Notify that we are paused */
@@ -148,7 +133,7 @@ int up_cpu_paused(int cpu)
 
   /* Reset scheduler parameters */
 
-  sched_resume_scheduler(tcb);
+  nxsched_resume_scheduler(tcb);
 
   /* Then switch contexts.  Any necessary address environment changes
    * will be made when the interrupt returns.
@@ -186,13 +171,26 @@ void xtensa_pause_handler(void)
   int cpu = up_cpu_index();
 
   /* Check for false alarms.  Such false could occur as a consequence of
-   * some deadlock breaking logic that might have already serviced the SG2
+   * some deadlock breaking logic that might have already serviced the
    * interrupt by calling up_cpu_paused.
    */
 
-  if (spin_islocked(&g_cpu_paused[cpu]))
+  if (up_cpu_pausereq(cpu))
     {
-      up_cpu_paused(cpu);
+      /* NOTE: The following enter_critical_section() will call
+       * up_cpu_paused() to process a pause request to break a deadlock
+       * because the caller held a critical section. Once up_cpu_paused()
+       * finished, the caller will proceed and release the g_cpu_irqlock.
+       * Then this CPU will acquire g_cpu_irqlock in the function.
+       */
+
+      irqstate_t flags = enter_critical_section();
+
+      /* NOTE: the pause request should not exist here */
+
+      DEBUGVERIFY(!up_cpu_pausereq(cpu));
+
+      leave_critical_section(flags);
     }
 }
 
@@ -228,9 +226,9 @@ int up_cpu_pause(int cpu)
 
   DEBUGASSERT(cpu >= 0 && cpu < CONFIG_SMP_NCPUS && cpu != this_cpu());
 
-  /* Take the both spinlocks.  The g_cpu_wait spinlock will prevent the SGI2
+  /* Take both spinlocks.  The g_cpu_wait spinlock will prevent the interrupt
    * handler from returning until up_cpu_resume() is called; g_cpu_paused
-   * is a handshake that will prefent this function from returning until
+   * is a handshake that will prevent this function from returning until
    * the CPU is actually paused.
    */
 
@@ -240,7 +238,7 @@ int up_cpu_pause(int cpu)
   spin_lock(&g_cpu_wait[cpu]);
   spin_lock(&g_cpu_paused[cpu]);
 
-  /* Execute SGI2 */
+  /* Execute the intercpu interrupt */
 
   ret = xtensa_intercpu_interrupt(cpu, CPU_INTCODE_PAUSE);
   if (ret < 0)
@@ -276,8 +274,8 @@ int up_cpu_pause(int cpu)
  *   state of the task at the head of the g_assignedtasks[cpu] list, and
  *   resume normal tasking.
  *
- *   This function is called after up_cpu_pause in order resume operation of
- *   the CPU after modifying its g_assignedtasks[cpu] list.
+ *   This function is called after up_cpu_pause in order to resume operation
+ *   of the CPU after modifying its g_assignedtasks[cpu] list.
  *
  * Input Parameters:
  *   cpu - The index of the CPU being re-started.
@@ -297,7 +295,7 @@ int up_cpu_resume(int cpu)
 
   DEBUGASSERT(cpu >= 0 && cpu < CONFIG_SMP_NCPUS && cpu != this_cpu());
 
-  /* Release the spinlock.  Releasing the spinlock will cause the SGI2
+  /* Release the spinlock.  Releasing the spinlock will cause the interrupt
    * handler on 'cpu' to continue and return from interrupt to the newly
    * established thread.
    */

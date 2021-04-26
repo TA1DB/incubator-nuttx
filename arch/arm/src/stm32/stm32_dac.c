@@ -1,38 +1,22 @@
-/************************************************************************************
+/****************************************************************************
  * arch/arm/src/stm32/stm32_dac.c
  *
- *   Copyright (C) 2011, 2013, 2016 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
- *           Mateusz Szafoni <raiden00@railab.me>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
- ************************************************************************************/
+ ****************************************************************************/
 
 /****************************************************************************
  * Included Files
@@ -45,7 +29,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
-#include <math.h>
 #include <errno.h>
 #include <debug.h>
 
@@ -53,8 +36,8 @@
 #include <nuttx/irq.h>
 #include <nuttx/analog/dac.h>
 
-#include "up_internal.h"
-#include "up_arch.h"
+#include "arm_internal.h"
+#include "arm_arch.h"
 
 #include "chip.h"
 #include "stm32.h"
@@ -68,13 +51,16 @@
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+
 /* Configuration ************************************************************/
+
 /* Up to 2 DAC interfaces for up to 3 channels are supported
  *
  * NOTE: STM32_NDAC tells how many channels chip supports.
- *       ST is not consistent in the naming of DAC interfaces, so we introduce
- *       our own naming convention. We distinguish DAC1 and DAC2 only if the chip
- *       has two separate areas in memory map to support DAC channels.
+ *       ST is not consistent in the naming of DAC interfaces, so we
+ *       introduce our own naming convention. We distinguish DAC1 and DAC2
+ *       only if the chip has two separate areas in memory map to support DAC
+ *       channels.
  */
 
 #if STM32_NDAC < 3
@@ -205,7 +191,8 @@
 #  endif
 #endif
 
-/* DMA *********************************************************************/
+/* DMA **********************************************************************/
+
 /* DMA channels and interface values differ for the F1 and F4 families */
 
 #undef HAVE_DMA
@@ -485,8 +472,7 @@
 #  define DAC2CH1_TSEL_VALUE DAC_CR_TSEL_SW
 #endif
 
-/*
- * We need index which describes when HRTIM is selected as trigger.
+/* We need index which describes when HRTIM is selected as trigger.
  * It will be used to skip timer configuration where needed.
  */
 
@@ -534,7 +520,9 @@
  * Private Types
  ****************************************************************************/
 
-/* This structure represents the internal state of the single STM32 DAC block */
+/* This structure represents the internal state of the single STM32 DAC
+ * block
+ */
 
 struct stm32_dac_s
 {
@@ -571,6 +559,7 @@ struct stm32_chan_s
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
+
 /* DAC Register access */
 
 #ifdef HAVE_TIMER
@@ -603,7 +592,7 @@ static int  dac_ioctl(FAR struct dac_dev_s *dev, int cmd, unsigned long arg);
 static int  dac_timinit(FAR struct stm32_chan_s *chan);
 #  endif
 static int  dma_remap(FAR struct stm32_chan_s *chan);
-static void dma_bufferinit(FAR struct stm32_chan_s *chan, uint16_t* buffer,
+static void dma_bufferinit(FAR struct stm32_chan_s *chan, uint16_t *buffer,
                            uint16_t len);
 #endif
 static int  dac_chaninit(FAR struct stm32_chan_s *chan);
@@ -917,8 +906,8 @@ static void dac_reset(FAR struct dac_dev_s *dev)
  * Description:
  *   Configure the DAC. This method is called the first time that the DAC
  *   device is opened.  This will occur when the port is first opened.
- *   This setup includes configuring and attaching DAC interrupts.  Interrupts
- *   are all disabled upon return.
+ *   This setup includes configuring and attaching DAC interrupts.
+ *   Interrupts are all disabled upon return.
  *
  * Input Parameters:
  *
@@ -1015,7 +1004,7 @@ static int dac_send(FAR struct dac_dev_s *dev, FAR struct dac_msg_s *msg)
 
   if (chan->intf > 0)
     {
-      stm32_dac_modify_cr(chan, 0, DAC_CR_EN|DAC_CR_BOFF);
+      stm32_dac_modify_cr(chan, 0, DAC_CR_EN | DAC_CR_BOFF);
     }
   else
 #endif
@@ -1070,6 +1059,7 @@ static int dac_send(FAR struct dac_dev_s *dev, FAR struct dac_msg_s *msg)
       tim_modifyreg(chan, STM32_BTIM_EGR_OFFSET, 0, ATIM_EGR_UG);
     }
 #endif
+
   return OK;
 }
 
@@ -1125,7 +1115,7 @@ static int dac_ioctl(FAR struct dac_dev_s *dev, int cmd, unsigned long arg)
  * Name: dma_bufferinit
  ****************************************************************************/
 
-static void dma_bufferinit(FAR struct stm32_chan_s *chan, uint16_t* buffer,
+static void dma_bufferinit(FAR struct stm32_chan_s *chan, uint16_t *buffer,
                            uint16_t len)
 {
   memcpy(chan->dmabuffer, buffer, len);
@@ -1289,8 +1279,8 @@ static int dac_timinit(FAR struct stm32_chan_s *chan)
 
   modifyreg32(regaddr, 0, setbits);
 
-  /* Calculate optimal values for the timer prescaler and for the timer reload
-   * register.  If 'frequency' is the desired frequency, then
+  /* Calculate optimal values for the timer prescaler and for the timer
+   * reload register.  If 'frequency' is the desired frequency, then
    *
    *   reload = timclk / frequency
    *   timclk = pclk / presc
@@ -1299,8 +1289,8 @@ static int dac_timinit(FAR struct stm32_chan_s *chan)
    *
    *   reload = pclk / presc / frequency
    *
-   * There are many solutions to this this, but the best solution will be the
-   * one that has the largest reload value and the smallest prescaler value.
+   * There are many solutions to this, but the best solution will be the one
+   * that has the largest reload value and the smallest prescaler value.
    * That is the solution that should give us the most accuracy in the timer
    * control.  Subject to:
    *
@@ -1439,7 +1429,7 @@ static int dac_chaninit(FAR struct stm32_chan_s *chan)
 
   if (chan->hasdma)
     {
-      /* Remap DMA request if necessary*/
+      /* Remap DMA request if necessary */
 
       dma_remap(chan);
 

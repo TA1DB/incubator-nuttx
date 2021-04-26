@@ -1,5 +1,5 @@
 /****************************************************************************
- * boards/arm/stm32f4/nucleo-f429zi/src/stm32_bbsram.c
+ * boards/arm/stm32/nucleo-f429zi/src/stm32_bbsram.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -37,7 +37,7 @@
 
 #include <nuttx/fs/fs.h>
 
-#include "up_internal.h"
+#include "arm_internal.h"
 #include "stm32_bbsram.h"
 
 #include "nucleo-144.h"
@@ -361,7 +361,7 @@ int stm32_bbsram_int(void)
           syslog(LOG_INFO, "Fault Logged on %s - Valid\n", buf);
         }
 
-      rv = unlink(HARDFAULT_PATH);
+      rv = nx_unlink(HARDFAULT_PATH);
       if (rv < 0)
         {
           syslog(LOG_INFO, "stm32 bbsram: Failed to unlink Fault Log file"
@@ -379,7 +379,7 @@ int stm32_bbsram_int(void)
 
 #if defined(CONFIG_STM32F4_SAVE_CRASHDUMP)
 void board_crashdump(uintptr_t currentsp, FAR void *tcb,
-                     FAR const uint8_t *filename, int lineno)
+                     FAR const char *filename, int lineno)
 {
   fullcontext_t *pdump = (fullcontext_t *)&g_sdata;
   FAR struct tcb_s *rtcb;
@@ -449,22 +449,15 @@ void board_crashdump(uintptr_t currentsp, FAR void *tcb,
       pdump->info.stacks.user.sp = currentsp;
     }
 
-  if (pdump->info.pid == 0)
-    {
-      pdump->info.stacks.user.top = g_idle_topstack - 4;
-      pdump->info.stacks.user.size = CONFIG_IDLETHREAD_STACKSIZE;
-    }
-  else
-    {
-      pdump->info.stacks.user.top = (uint32_t) rtcb->adj_stack_ptr;
-      pdump->info.stacks.user.size = (uint32_t) rtcb->adj_stack_size;
-    }
+  pdump->info.stacks.user.top = (uint32_t)rtcb->stack_base_ptr +
+                                          rtcb->adj_stack_size;
+  pdump->info.stacks.user.size = (uint32_t)rtcb->adj_stack_size;
 
 #if CONFIG_ARCH_INTERRUPTSTACK > 3
   /* Get the limits on the interrupt stack memory */
 
-  pdump->info.stacks.interrupt.top = (uint32_t)&g_intstackbase;
-  pdump->info.stacks.interrupt.size  = (CONFIG_ARCH_INTERRUPTSTACK & ~3);
+  pdump->info.stacks.interrupt.top = (uint32_t)&g_intstacktop;
+  pdump->info.stacks.interrupt.size = (CONFIG_ARCH_INTERRUPTSTACK & ~3);
 
   /* If In interrupt Context save the interrupt stack data centered
    * about the interrupt stack pointer
@@ -519,14 +512,14 @@ void board_crashdump(uintptr_t currentsp, FAR void *tcb,
 
       while (*dead)
         {
-          up_lowputc(*dead++);
+          arm_lowputc(*dead++);
         }
     }
   else if (rv == -ENOSPC)
     {
       /* hard fault again */
 
-      up_lowputc('!');
+      arm_lowputc('!');
     }
 }
 #endif /* CONFIG_STM32F4_SAVE_CRASHDUMP */

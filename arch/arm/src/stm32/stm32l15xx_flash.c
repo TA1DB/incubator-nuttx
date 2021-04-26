@@ -1,5 +1,5 @@
-/************************************************************************************
- * arch/arm/src/stm32/stm3l15xx_flash.c
+/****************************************************************************
+ * arch/arm/src/stm32/stm32l15xx_flash.c
  *
  *   Copyright (C) 2011 Uros Platise. All rights reserved.
  *   Author: Uros Platise <uros.platise@isotel.eu>
@@ -34,9 +34,10 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ************************************************************************************/
+ ****************************************************************************/
 
-/* Provides standard flash access functions, to be used by the  flash mtd driver.
+/* Provides standard flash access functions, to be used by the
+ * flash mtd driver.
  * The interface is defined in the include/nuttx/progmem.h
  *
  * Requirements during write/erase operations on FLASH:
@@ -44,14 +45,15 @@
  *  - Low Power Modes are not permitted during write/erase
  */
 
-/************************************************************************************
+/****************************************************************************
  * Included Files
- ************************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 #include <nuttx/arch.h>
 #include <nuttx/semaphore.h>
 
+#include <inttypes.h>
 #include <stdbool.h>
 #include <assert.h>
 #include <errno.h>
@@ -60,15 +62,15 @@
 #include "stm32_rcc.h"
 #include "stm32_waste.h"
 
-#include "up_arch.h"
+#include "arm_arch.h"
 
 /* Only for the STM32L15xx family. */
 
 #if defined(CONFIG_STM32_STM32L15XX)
 
-/************************************************************************************
+/****************************************************************************
  * Pre-processor Definitions
- ************************************************************************************/
+ ****************************************************************************/
 
 #define FLASH_KEY1        0x8c9daebf
 #define FLASH_KEY2        0x13141516
@@ -87,15 +89,15 @@
 
 #define FLASH_ERASEDVALUE  0x00
 
-/************************************************************************************
+/****************************************************************************
  * Private Data
- ************************************************************************************/
+ ****************************************************************************/
 
 static sem_t g_sem = SEM_INITIALIZER(1);
 
-/************************************************************************************
+/****************************************************************************
  * Private Functions
- ************************************************************************************/
+ ****************************************************************************/
 
 static int sem_lock(void)
 {
@@ -111,7 +113,7 @@ static void stm32_eeprom_unlock(void)
 {
   while (getreg32(STM32_FLASH_SR) & FLASH_SR_BSY)
     {
-      up_waste();
+      stm32_waste();
     }
 
   if (getreg32(STM32_FLASH_PECR) & FLASH_PECR_PELOCK)
@@ -221,7 +223,7 @@ static ssize_t stm32_eeprom_erase_write(size_t addr, const void *buf,
 
       while (getreg32(STM32_FLASH_SR) & FLASH_SR_BSY)
         {
-          up_waste();
+          stm32_waste();
         }
 
       /* Verify */
@@ -280,9 +282,9 @@ static ssize_t stm32_eeprom_erase_write(size_t addr, const void *buf,
   return buflen;
 }
 
-/************************************************************************************
+/****************************************************************************
  * Public Functions
- ************************************************************************************/
+ ****************************************************************************/
 
 int stm32_flash_unlock(void)
 {
@@ -472,7 +474,7 @@ ssize_t up_progmem_eraseblock(size_t block)
 
   while (getreg32(STM32_FLASH_SR) & FLASH_SR_BSY)
     {
-      up_waste();
+      stm32_waste();
     }
 
   flash_lock();
@@ -538,7 +540,7 @@ ssize_t up_progmem_write(size_t addr, const void *buf, size_t count)
 
       while (getreg32(STM32_FLASH_SR) & FLASH_SR_BSY)
         {
-          up_waste();
+          stm32_waste();
         }
 
       /* Verify */
@@ -564,7 +566,8 @@ out:
 
   if (ret != OK)
     {
-      ferr("flash write error: %d, status: 0x%x\n", ret, getreg32(STM32_FLASH_SR));
+      ferr("flash write error: %d, status: 0x%" PRIx32 "\n",
+           ret, getreg32(STM32_FLASH_SR));
       modifyreg32(STM32_FLASH_SR, 0, FLASH_SR_ALLERRS);
     }
 

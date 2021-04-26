@@ -38,8 +38,8 @@
 
 #include <arch/board/board.h>
 
-#include "up_arch.h"
-#include "up_internal.h"
+#include "riscv_arch.h"
+#include "riscv_internal.h"
 
 #include "litex_config.h"
 #include "chip.h"
@@ -107,7 +107,7 @@
 
 /* Common initialization logic will not not know that the all of the UARTs
  * have been disabled.  So, as a result, we may still have to provide
- * stub implementations of up_earlyserialinit(), up_serialinit(), and
+ * stub implementations of riscv_earlyserialinit(), riscv_serialinit(), and
  * up_putc().
  */
 
@@ -144,7 +144,7 @@ static int  up_attach(struct uart_dev_s *dev);
 static void up_detach(struct uart_dev_s *dev);
 static int  up_interrupt(int irq, void *context, FAR void *arg);
 static int  up_ioctl(struct file *filep, int cmd, unsigned long arg);
-static int  up_receive(struct uart_dev_s *dev, uint32_t *status);
+static int  up_receive(struct uart_dev_s *dev, unsigned int *status);
 static void up_rxint(struct uart_dev_s *dev, bool enable);
 static bool up_rxavailable(struct uart_dev_s *dev);
 static void up_send(struct uart_dev_s *dev, int ch);
@@ -452,7 +452,7 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
  *
  ****************************************************************************/
 
-static int up_receive(struct uart_dev_s *dev, uint32_t *status)
+static int up_receive(struct uart_dev_s *dev, unsigned int *status)
 {
   struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   int rxdata;
@@ -621,18 +621,18 @@ static bool up_txempty(struct uart_dev_s *dev)
 #ifdef USE_EARLYSERIALINIT
 
 /****************************************************************************
- * Name: up_earlyserialinit
+ * Name: riscv_earlyserialinit
  *
  * Description:
  *   Performs the low level UART initialization early in debug so that the
  *   serial console will be available during bootup.  This must be called
- *   before up_serialinit.  NOTE:  This function depends on GPIO pin
- *   configuration performed in up_consoleinit() and main clock iniialization
- *   performed in up_clkinitialize().
+ *   before riscv_serialinit.  NOTE:  This function depends on GPIO pin
+ *   configuration performed in up_consoleinit() and main clock
+ *   initialization performed in up_clkinitialize().
  *
  ****************************************************************************/
 
-void up_earlyserialinit(void)
+void riscv_earlyserialinit(void)
 {
   /* Disable interrupts from all UARTS.  The console is enabled in
    * litex_consoleinit().
@@ -653,15 +653,15 @@ void up_earlyserialinit(void)
 #endif
 
 /****************************************************************************
- * Name: up_serialinit
+ * Name: riscv_serialinit
  *
  * Description:
  *   Register serial console and serial ports.  This assumes
- *   that up_earlyserialinit was called previously.
+ *   that riscv_earlyserialinit was called previously.
  *
  ****************************************************************************/
 
-void up_serialinit(void)
+void riscv_serialinit(void)
 {
   /* Register the console */
 
@@ -699,17 +699,17 @@ int up_putc(int ch)
     {
       /* Add CR */
 
-      up_lowputc('\r');
+      riscv_lowputc('\r');
     }
 
-  up_lowputc(ch);
+  riscv_lowputc(ch);
   up_restoreuartint(priv, imr);
 #endif
   return ch;
 }
 
 /****************************************************************************
- * Name: up_earlyserialinit, up_serialinit, and up_putc
+ * Name: riscv_earlyserialinit, riscv_serialinit, and up_putc
  *
  * Description:
  *   stubs that may be needed.  These stubs would be used if all UARTs are
@@ -720,11 +720,11 @@ int up_putc(int ch)
  ****************************************************************************/
 
 #else /* HAVE_UART_DEVICE */
-void up_earlyserialinit(void)
+void riscv_earlyserialinit(void)
 {
 }
 
-void up_serialinit(void)
+void riscv_serialinit(void)
 {
 }
 
@@ -753,10 +753,10 @@ int up_putc(int ch)
     {
       /* Add CR */
 
-      up_lowputc('\r');
+      riscv_lowputc('\r');
     }
 
-  up_lowputc(ch);
+  riscv_lowputc(ch);
 #endif
   return ch;
 }

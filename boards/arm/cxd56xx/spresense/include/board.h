@@ -1,35 +1,20 @@
 /****************************************************************************
  * boards/arm/cxd56xx/spresense/include/board.h
  *
- *   Copyright 2018 Sony Semiconductor Solutions Corporation
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of Sony Semiconductor Solutions Corporation nor
- *    the names of its contributors may be used to endorse or promote
- *    products derived from this software without specific prior written
- *    permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -52,6 +37,7 @@
 #include "cxd56_charger.h"
 #include "cxd56_gs2200m.h"
 #include "cxd56_i2cdev.h"
+#include "cxd56_spidev.h"
 #include "cxd56_sdcard.h"
 #include "cxd56_wdt.h"
 #include "cxd56_gpioif.h"
@@ -61,12 +47,15 @@
 #include "cxd56_ak09912.h"
 #include "cxd56_apds9930.h"
 #include "cxd56_apds9960.h"
+#include "cxd56_bcm20706.h"
 #include "cxd56_bh1721fvc.h"
 #include "cxd56_bh1745nuc.h"
 #include "cxd56_bm1383glv.h"
 #include "cxd56_bm1422gmv.h"
 #include "cxd56_bmi160.h"
 #include "cxd56_bmp280.h"
+#include "cxd56_emmcdev.h"
+#include "cxd56_spisd.h"
 #include "cxd56_kx022.h"
 #include "cxd56_lt1pa01.h"
 #include "cxd56_rpr0521rs.h"
@@ -124,6 +113,18 @@
 #define LED_SIGNAL              (BOARD_LED2_BIT | BOARD_LED3_BIT)
 #define LED_ASSERTION           (BOARD_LED1_BIT | BOARD_LED2_BIT | BOARD_LED3_BIT)
 #define LED_PANIC               (BOARD_LED4_BIT)
+
+#ifdef CONFIG_ARCH_LEDS_CPU_ACTIVITY
+/* NOTE: LED_CPUx is not a bit pattern but just a number which
+ * does not conflict with existing LED bit patterns
+ */
+
+#define LED_CPU0                (100)
+#define LED_CPU1                (101)
+#define LED_CPU2                (102)
+#define LED_CPU3                (103)
+#define LED_CPU                 (LED_CPU0 + up_cpu_index())
+#endif
 
 /* Buttons definitions ******************************************************/
 
@@ -184,13 +185,18 @@ enum board_power_device
 
   POWER_AUDIO_AVDD      = PMIC_GPO(1),
   POWER_AUDIO_MUTE      = PMIC_GPO(6),
-  POWER_IMAGE_SENSOR    = PMIC_GPO(4) | PMIC_GPO(5) | PMIC_GPO(7),
+  POWER_IMAGE_SENSOR    = PMIC_GPO(4),
 
   POWER_BTBLE           = PMIC_NONE,
   POWER_SENSOR          = PMIC_NONE,
   POWER_EMMC            = PMIC_NONE,
   POWER_LTE             = PMIC_GPO(2),
 };
+
+/* Power Off Level definitions **********************************************/
+
+#define BOARD_POWEROFF_DEEP (0)
+#define BOARD_POWEROFF_COLD (1)
 
 /* CXD5247 audio control definitions ****************************************/
 
@@ -254,6 +260,14 @@ enum board_power_device
  */
 
 #define BOARDIOC_USBDEV_SETNOTIFYSIG      (BOARDIOC_USER+0x0001)
+
+/* Altair modem device pin definitions **************************************/
+
+#define ALTMDM_SLAVE_REQ          PIN_SPI2_SCK
+#define ALTMDM_MASTER_REQ         PIN_RTC_IRQ_OUT
+#define ALTMDM_WAKEUP             PIN_SPI2_MOSI
+#define ALTMDM_SHUTDOWN           PIN_SPI2_MISO
+#define ALTMDM_LTE_POWER_BUTTON   PIN_AP_CLK
 
 /****************************************************************************
  * Public Types

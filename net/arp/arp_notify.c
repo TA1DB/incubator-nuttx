@@ -77,7 +77,7 @@ void arp_wait_setup(in_addr_t ipaddr, FAR struct arp_notify_s *notify)
    */
 
   nxsem_init(&notify->nt_sem, 0, 0);
-  nxsem_setprotocol(&notify->nt_sem, SEM_PRIO_NONE);
+  nxsem_set_protocol(&notify->nt_sem, SEM_PRIO_NONE);
 
   /* Add the wait structure to the list with interrupts disabled */
 
@@ -188,6 +188,9 @@ int arp_wait(FAR struct arp_notify_s *notify, unsigned int timeout)
 void arp_notify(in_addr_t ipaddr)
 {
   FAR struct arp_notify_s *curr;
+  irqstate_t flags;
+
+  flags = enter_critical_section();
 
   /* Find an entry with the matching IP address in the list of waiters */
 
@@ -207,6 +210,8 @@ void arp_notify(in_addr_t ipaddr)
           break;
         }
     }
+
+  leave_critical_section(flags);
 }
 
 #endif /* CONFIG_NET_ARP_SEND */

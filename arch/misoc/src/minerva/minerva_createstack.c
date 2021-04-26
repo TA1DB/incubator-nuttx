@@ -47,6 +47,7 @@
 
 #include <nuttx/kmalloc.h>
 #include <nuttx/arch.h>
+#include <nuttx/tls.h>
 #include <nuttx/board.h>
 #include <arch/board/board.h>
 
@@ -88,8 +89,8 @@
  *   - adj_stack_size: Stack size after adjustment for hardware, processor,
  *     etc.  This value is retained only for debug purposes.
  *   - stack_alloc_ptr: Pointer to allocated stack
- *   - adj_stack_ptr: Adjusted stack_alloc_ptr for HW.  The initial value of
- *     the stack pointer.
+ *   - stack_base_ptr: Adjusted stack base pointer after the TLS Data and
+ *     Arguments has been removed from the stack allocation.
  *
  * Input Parameters:
  *   - tcb: The TCB of new task
@@ -115,6 +116,18 @@
 
 int up_create_stack(FAR struct tcb_s *tcb, size_t stack_size, uint8_t ttype)
 {
+#ifdef CONFIG_TLS_ALIGNED
+  /* The allocated stack size must not exceed the maximum possible for the
+   * TLS feature.
+   */
+
+  DEBUGASSERT(stack_size <= TLS_MAXSTACK);
+  if (stack_size >= TLS_MAXSTACK)
+    {
+      stack_size = TLS_MAXSTACK;
+    }
+#endif
+
   /* Is there already a stack allocated of a different size? Because of
    * alignment issues, stack_size might erroneously appear to be of a
    * different size.  Fortunately, this is not a critical operation.
@@ -133,22 +146,41 @@ int up_create_stack(FAR struct tcb_s *tcb, size_t stack_size, uint8_t ttype)
     {
       /* Allocate the stack.  If DEBUG is enabled (but not stack debug), then
        * create a zeroed stack to make stack dumps easier to trace.
+       * If TLS is enabled, then we must allocate aligned stacks.
        */
 
-#if defined(CONFIG_BUILD_KERNEL) && defined(CONFIG_MM_KERNEL_HEAP)
+#ifdef CONFIG_TLS_ALIGNED
+#ifdef CONFIG_MM_KERNEL_HEAP
       /* Use the kernel allocator if this is a kernel thread */
 
       if (ttype == TCB_FLAG_TTYPE_KERNEL)
         {
-          tcb->stack_alloc_ptr = (uint32_t *) kmm_malloc(stack_size);
+          tcb->stack_alloc_ptr = kmm_memalign(TLS_STACK_ALIGN, stack_size);
         }
       else
 #endif
         {
           /* Use the user-space allocator if this is a task or pthread */
 
-          tcb->stack_alloc_ptr = (uint32_t *) kumm_malloc(stack_size);
+          tcb->stack_alloc_ptr = kumm_memalign(TLS_STACK_ALIGN, stack_size);
         }
+
+#else /* CONFIG_TLS_ALIGNED */
+#ifdef CONFIG_MM_KERNEL_HEAP
+      /* Use the kernel allocator if this is a kernel thread */
+
+      if (ttype == TCB_FLAG_TTYPE_KERNEL)
+        {
+          tcb->stack_alloc_ptr = kmm_malloc(stack_size);
+        }
+      else
+#endif
+        {
+          /* Use the user-space allocator if this is a task or pthread */
+
+          tcb->stack_alloc_ptr = kumm_malloc(stack_size);
+        }
+#endif /* CONFIG_TLS_ALIGNED */
 
 #ifdef CONFIG_DEBUG_FEATURES
       /* Was the allocation successful? */
@@ -164,7 +196,7 @@ int up_create_stack(FAR struct tcb_s *tcb, size_t stack_size, uint8_t ttype)
 
   if (tcb->stack_alloc_ptr)
     {
-      size_t top_of_stack;
+      uintptr_t top_of_stack;
       size_t size_of_stack;
 
       /* Yes.. If stack debug is enabled, then fill the stack with a
@@ -182,20 +214,20 @@ int up_create_stack(FAR struct tcb_s *tcb, size_t stack_size, uint8_t ttype)
        * the stack are referenced as positive word offsets from sp.
        */
 
-      top_of_stack = (uint32_t) tcb->stack_alloc_ptr + stack_size - 4;
+      top_of_stack = (uintptr_t)tcb->stack_alloc_ptr + stack_size;
 
       /* The MINERVA stack must be aligned at word (4 byte) boundaries; for
-       * floating point use, the stack must be aligned to 8-byte addresses. If
-       * necessary top_of_stack must be rounded down to the next boundary to
-       * meet these alignment requirements.
+       * floating point use, the stack must be aligned to 8-byte addresses.
+       * If necessary top_of_stack must be rounded down to the next boundary
+       * to meet these alignment requirements.
        */
 
       top_of_stack = STACK_ALIGN_DOWN(top_of_stack);
-      size_of_stack = top_of_stack - (uint32_t) tcb->stack_alloc_ptr + 4;
+      size_of_stack = top_of_stack - (uintptr_t)tcb->stack_alloc_ptr;
 
       /* Save the adjusted stack values in the struct tcb_s */
 
-      tcb->adj_stack_ptr = (FAR uint32_t *) top_of_stack;
+      tcb->stack_base_ptr  = tcb->stack_alloc_ptr;
       tcb->adj_stack_size = size_of_stack;
 
       board_autoled_on(LED_STACKCREATED);

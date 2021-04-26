@@ -60,6 +60,8 @@
 
 #include <nuttx/fs/fs.h>
 
+#include "libc.h"
+
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -319,6 +321,8 @@ static const char g_wildabbr[] = WILDABBR;
 static char g_lcl_tzname[MY_TZNAME_MAX + 1];
 static int g_lcl_isset;
 static int g_gmt_isset;
+static sem_t g_lcl_sem = SEM_INITIALIZER(1);
+static sem_t g_gmt_sem = SEM_INITIALIZER(1);
 
 /* Section 4.12.3 of X3.159-1989 requires that
  *    Except for the strftime function, these functions [asctime,
@@ -411,6 +415,28 @@ static FAR struct state_s *gmtptr;
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
+
+static void tz_semtake(FAR sem_t *sem)
+{
+  int errcode = 0;
+  int ret;
+
+  do
+    {
+      ret = _SEM_WAIT(sem);
+      if (ret < 0)
+        {
+          errcode = _SEM_ERRNO(ret);
+          DEBUGASSERT(errcode == EINTR || errcode == ECANCELED);
+        }
+    }
+  while (ret < 0 && errcode == EINTR);
+}
+
+static void tz_semgive(FAR sem_t *sem)
+{
+  DEBUGVERIFY(_SEM_POST(sem));
+}
 
 static int_fast32_t detzcode(FAR const char *const codep)
 {
@@ -544,7 +570,7 @@ static int tzload(FAR const char *name,
   int doaccess;
   union local_storage *lsp;
 
-  lsp = malloc(sizeof *lsp);
+  lsp = lib_malloc(sizeof *lsp);
   if (!lsp)
     {
       return -1;
@@ -598,14 +624,14 @@ static int tzload(FAR const char *name,
       goto oops;
     }
 
-  fid = open(name, O_RDONLY | O_BINARY);
+  fid = _NX_OPEN(name, O_RDONLY | O_BINARY);
   if (fid < 0)
     {
       goto oops;
     }
 
   nread = _NX_READ(fid, up->buf, sizeof up->buf);
-  if (close(fid) < 0 || nread <= 0)
+  if (_NX_CLOSE(fid) < 0 || nread <= 0)
     {
       goto oops;
     }
@@ -897,11 +923,11 @@ static int tzload(FAR const char *name,
     }
 
   sp->defaulttype = i;
-  free(up);
+  lib_free(up);
   return 0;
 
 oops:
-  free(up);
+  lib_free(up);
   return -1;
 }
 
@@ -1637,29 +1663,29 @@ static void gmtload(FAR struct state_s *const sp)
 
 static void tzsetwall(void)
 {
+  tz_semtake(&g_lcl_sem);
+
   if (g_lcl_isset < 0)
     {
+      tz_semgive(&g_lcl_sem);
       return;
     }
 
-  g_lcl_isset = -1;
-
   if (lclptr == NULL)
     {
-      lclptr = malloc(sizeof *lclptr);
-      if (lclptr == NULL)
-        {
-          settzname();          /* all we can do */
-          return;
-        }
+      lclptr = lib_malloc(sizeof *lclptr);
     }
 
-  if (tzload(NULL, lclptr, TRUE) != 0)
+  if (lclptr != NULL && tzload(NULL, lclptr, TRUE) != 0)
     {
       gmtload(lclptr);
     }
 
   settzname();
+
+  g_lcl_isset = -1;
+
+  tz_semgive(&g_lcl_sem);
 }
 
 /* The easy way to behave "as if no library function calls" localtime
@@ -1789,15 +1815,19 @@ static struct tm *localsub(FAR const time_t * const timep,
 static struct tm *gmtsub(FAR const time_t * const timep,
                          const int_fast32_t offset, struct tm *const tmp)
 {
+  tz_semtake(&g_gmt_sem);
+
   if (!g_gmt_isset)
     {
-      gmtptr = malloc(sizeof *gmtptr);
-      g_gmt_isset = gmtptr != NULL;
-      if (g_gmt_isset)
+      gmtptr = lib_malloc(sizeof *gmtptr);
+      if (gmtptr != NULL)
         {
           gmtload(gmtptr);
+          g_gmt_isset = 1;
         }
     }
+
+  tz_semgive(&g_gmt_sem);
 
   return timesub(timep, offset, gmtptr, tmp);
 }
@@ -1972,6 +2002,8 @@ static struct tm *timesub(FAR const time_t * const timep,
 
   tmp->tm_mday = (int)(idays + 1);
   tmp->tm_isdst = 0;
+  tmp->tm_gmtoff = offset;
+  tmp->tm_zone = tzname[0];
 
   return tmp;
 }
@@ -2510,7 +2542,7 @@ void tzset(void)
 
   if (lclptr == NULL)
     {
-      lclptr = malloc(sizeof *lclptr);
+      lclptr = lib_malloc(sizeof *lclptr);
       if (lclptr == NULL)
         {
           settzname(); /* all we can do */

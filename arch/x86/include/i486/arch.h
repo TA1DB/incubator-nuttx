@@ -1,35 +1,20 @@
 /****************************************************************************
  * arch/x86/include/i486/arch.h
  *
- *   Copyright (C) 2011, 2015, 2017 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -170,16 +155,17 @@
 #  define PIC_OCW3_PCMD_MASK     (3 << PIC_OCW3_PCMD_SHIFT)
 #    define PIC_OCW3_PCMD_IRR    (2 << PIC_OCW3_PCMD_SHIFT) /* Next Read Returns Interrupt Request Register */
 #    define PIC_OCW3_PCMD_ISR    (3 << PIC_OCW3_PCMD_SHIFT) /* Next Read Returns In-Service Register */
-#  define PIC_OCW3_POLLCMD       (1 << 2) /* Poll command */
-#  define PIC_OCW3_ONE           (1 << 3) /* Must be set to 1 */
+#  define PIC_OCW3_POLLCMD       (1 << 2)                   /* Poll command */
+#  define PIC_OCW3_ONE           (1 << 3)                   /* Must be set to 1 */
 #  define PIC_OCW3_SM_SHIFT      (5)
 #  define PIC_OCW3_SM_MASK       (3 << PIC_OCW3_SM_SHIFT)
 #    define PIC_OCW3_RSM         (2 << PIC_OCW3_SM_SHIFT) /* Reset Special Mask */
 #    define PIC_OCW3_SSM         (3 << PIC_OCW3_SM_SHIFT) /* Set Special Mask */
 
-/* If the PIC has been reset, it must be initialized with 2 to 4 Initialization
- * Command Words (ICW) before it will accept and process Interrupt Requests. The
- * following outlines the four possible Initialization Command Words.
+/* If the PIC has been reset, it must be initialized with 2 to 4
+ * Initialization Command Words (ICW) before it will accept and process
+ * Interrupt Requests. The following outlines the four possible
+ * Initialization Command Words.
  */
 
 #define PIC1_ICW1                0x20
@@ -243,8 +229,8 @@
 #    define PIC_ICW4_BMODE_NON   (0 << PIC_ICW4_BMODE_SHIFT) /* Non - Buffered Mode */
 #    define PIC_ICW4_BMODE_SLAVE (2 << PIC_ICW4_BMODE_SHIFT) /* Buffered Mode - Slave */
 #    define PIC_ICW4_BMODE_MSTR  (3 << PIC_ICW4_BMODE_SHIFT) /* Buffered Mode - Master */
-#  define PIC_ICW4_AEOI          (1 << 1) /* Auto EOI  */
-#  define PIC_ICW4_808xMODE      (1 << 0) /* 8086/8080 Mode (vs MCS-80/85) */
+#  define PIC_ICW4_AEOI          (1 << 1)                    /* Auto EOI  */
+#  define PIC_ICW4_808XMODE      (1 << 0)                    /* 8086/8080 Mode (vs MCS-80/85) */
 
 /* Interrupt Mask Register */
 
@@ -340,7 +326,7 @@ begin_packed_struct struct gdt_ptr_s
 /* IDT data structures ******************************************************
  *
  * The Interrupt Descriptor Table (IDT) is a data structure used by the x86
- * architecture to implement an interrupt vector table. The IDT is used by the
+ * architecture to implement an interrupt vector table. IDT is used by the
  * processor to determine the correct response to interrupts and exceptions.
  */
 
@@ -371,7 +357,7 @@ begin_packed_struct struct idt_ptr_s
 
 /* Return stack pointer */
 
-static inline uint32_t up_getsp()
+static inline uint32_t x86_getsp()
 {
   uint32_t regval;
 

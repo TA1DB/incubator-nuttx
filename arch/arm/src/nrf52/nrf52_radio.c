@@ -1,5 +1,5 @@
 /****************************************************************************
- * arch/arm/src/nrf52/nrf52_radio.h
+ * arch/arm/src/nrf52/nrf52_radio.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -33,7 +33,7 @@
 #include <nuttx/arch.h>
 #include <arch/board/board.h>
 
-#include "up_arch.h"
+#include "arm_arch.h"
 
 #include "nrf52_gpio.h"
 #include "nrf52_radio.h"
@@ -1171,7 +1171,7 @@ nrf52_radio_initialize(int intf, FAR struct nrf52_radio_board_s *board)
    */
 
   nxsem_init(&dev->sem_isr, 0, 0);
-  nxsem_setprotocol(&dev->sem_isr, SEM_PRIO_NONE);
+  nxsem_set_protocol(&dev->sem_isr, SEM_PRIO_NONE);
 
   /* Connect board-specific data */
 
@@ -1183,7 +1183,6 @@ nrf52_radio_initialize(int intf, FAR struct nrf52_radio_board_s *board)
   if (ret < 0)
     {
       wlerr("ERROR: failed to reset radio interface %d\n", ret);
-      errno = ret;
       goto errout;
     }
 
@@ -1193,7 +1192,6 @@ nrf52_radio_initialize(int intf, FAR struct nrf52_radio_board_s *board)
   if (ret < 0)
     {
       wlerr("ERROR: failed to setup radio interface %d\n", ret);
-      errno = ret;
       goto errout;
     }
 

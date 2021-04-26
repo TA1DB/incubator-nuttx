@@ -1,35 +1,20 @@
 /****************************************************************************
  * sched/init/nx_smpstart.c
  *
- *   Copyright (C) 2016, 2019 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -87,32 +72,6 @@ void nx_idle_trampoline(void)
   sched_note_start(tcb);
 #endif
 
-  /* Then transfer control to the IDLE task */
-
-  nx_idle_task(0, NULL);
-
-  /* The IDLE task should never return */
-
-  DEBUGPANIC();
-}
-
-/****************************************************************************
- * Name: nx_idle_task
- *
- * Description:
- *   This is the common IDLE task for CPUs 1 through (CONFIG_SMP_NCPUS-1).
- *   It is equivalent to the CPU 0 IDLE logic in nx_start.c
- *
- * Input Parameters:
- *   Standard task arguments.
- *
- * Returned Value:
- *   This function does not return.
- *
- ****************************************************************************/
-
-int nx_idle_task(int argc, FAR char *argv[])
-{
   /* Enter the IDLE loop */
 
   sinfo("CPU%d: Beginning Idle Loop\n", this_cpu());
@@ -161,18 +120,14 @@ int nx_smp_start(void)
       FAR struct tcb_s *tcb = current_task(cpu);
       DEBUGASSERT(tcb != NULL);
 
-      ret = up_cpu_idlestack(cpu, tcb, CONFIG_SMP_IDLETHREAD_STACKSIZE);
+      ret = up_cpu_idlestack(cpu, tcb, CONFIG_IDLETHREAD_STACKSIZE);
       if (ret < 0)
         {
           serr("ERROR: Failed to allocate stack for CPU%d\n", cpu);
           return ret;
         }
 
-      /* Reinitialize the processor-specific portion of the TCB.  This is
-       * the second time this has been called for this CPU, but the stack
-       * was not yet initialized on the first call so we need to do it
-       * again.
-       */
+      /* Initialize the processor-specific portion of the TCB */
 
       up_initial_state(tcb);
     }

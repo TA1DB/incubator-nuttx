@@ -1,35 +1,20 @@
 /****************************************************************************
  * arch/arm/src/cxd56xx/cxd56_geofence.c
  *
- *   Copyright 2018 Sony Semiconductor Solutions Corporation
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of Sony Semiconductor Solutions Corporation nor
- *    the names of its contributors may be used to endorse or promote
- *    products derived from this software without specific prior written
- *    permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -169,7 +154,7 @@ FAR static int (*g_cmdlist[CXD56_GEOFENCE_IOCTL_MAX])(unsigned long) =
 
 static int cxd56_geofence_start(unsigned long arg)
 {
-  return GD_RegisterGeofence();
+  return fw_gd_registergeofence();
 }
 
 /****************************************************************************
@@ -189,7 +174,7 @@ static int cxd56_geofence_start(unsigned long arg)
 
 static int cxd56_geofence_stop(unsigned long arg)
 {
-  return GD_ReleaseGeofence();
+  return fw_gd_releasegeofence();
 }
 
 /****************************************************************************
@@ -219,7 +204,7 @@ static int cxd56_geofence_add_region(unsigned long arg)
 
   reg_data = (FAR struct cxd56_geofence_region_s *)arg;
 
-  ret = GD_GeoAddRegion(reg_data->id,
+  ret = fw_gd_geoaddregion(reg_data->id,
                         reg_data->latitude,
                         reg_data->longitude,
                         reg_data->radius);
@@ -254,7 +239,7 @@ static int cxd56_geofence_modify_region(unsigned long arg)
 
   reg_data = (FAR struct cxd56_geofence_region_s *)arg;
 
-  ret = GD_GeoModifyRegion(reg_data->id, reg_data->latitude,
+  ret = fw_gd_geomodifyregion(reg_data->id, reg_data->latitude,
                            reg_data->longitude, reg_data->radius);
 
   return ret;
@@ -286,7 +271,7 @@ static int cxd56_geofence_delete_region(unsigned long arg)
     }
 
   id = (uint8_t)arg;
-  ret = GD_GeoDeleteRegione(id);
+  ret = fw_gd_geodeleteregione(id);
 
   return ret;
 }
@@ -310,7 +295,7 @@ static int cxd56_geofence_delete_all_region(unsigned long arg)
 {
   int ret;
 
-  ret = GD_GeoDeleteAllRegion();
+  ret = fw_gd_geodeleteallregion();
 
   return ret;
 }
@@ -342,7 +327,7 @@ static int cxd56_geofence_get_region_data(unsigned long arg)
 
   reg_data = (FAR struct cxd56_geofence_region_s *)arg;
 
-  ret = GD_GeoGetRegionData(reg_data->id, &reg_data->latitude,
+  ret = fw_gd_geogetregiondata(reg_data->id, &reg_data->latitude,
                             &reg_data->longitude, &reg_data->radius);
 
   return ret;
@@ -370,7 +355,7 @@ static int cxd56_geofence_get_used_id(unsigned long arg)
       return -EINVAL;
     }
 
-  *(uint32_t *)arg = GD_GeoGetUsedRegionId();
+  *(uint32_t *)arg = fw_gd_geogetusedregionid();
 
   return 0;
 }
@@ -394,7 +379,7 @@ static int cxd56_geofence_get_all_status(unsigned long arg)
 {
   int ret;
 
-  ret = GD_GeoSetAllRgionNotifyRequest();
+  ret = fw_gd_geosetallrgionnotifyrequest();
 
   return ret;
 }
@@ -426,7 +411,7 @@ static int cxd56_geofence_set_mode(unsigned long arg)
 
   mode = (FAR struct cxd56_geofence_mode_s *)arg;
 
-  ret = GD_GeoSetOpMode(mode->deadzone, mode->dwell_detecttime);
+  ret = fw_gd_geosetopmode(mode->deadzone, mode->dwell_detecttime);
 
   return ret;
 }
@@ -571,9 +556,9 @@ static ssize_t cxd56_geofence_read(FAR struct file *filep, FAR char *buffer,
       goto _err;
     }
 
-  /* GD_ReadBuffer returns copied data size or negative error code */
+  /* fw_gd_readbuffer returns copied data size or negative error code */
 
-  ret = GD_ReadBuffer(CXD56_CPU1_DEV_GEOFENCE, 0, buffer, len);
+  ret = fw_gd_readbuffer(CXD56_CPU1_DEV_GEOFENCE, 0, buffer, len);
 
   _err:
   return ret;
@@ -659,7 +644,7 @@ static int cxd56_geofence_poll(FAR struct file *filep,
 
               priv->fds[i] = fds;
               fds->priv    = &priv->fds[i];
-              GD_SetNotifyMask(CXD56_CPU1_DEV_GEOFENCE, FALSE);
+              fw_gd_setnotifymask(CXD56_CPU1_DEV_GEOFENCE, FALSE);
               break;
             }
         }

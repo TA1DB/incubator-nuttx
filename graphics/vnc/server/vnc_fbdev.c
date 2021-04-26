@@ -109,6 +109,11 @@ static int up_setcursor(FAR struct fb_vtable_s *vtable,
                         FAR struct fb_setcursor_s *settings);
 #endif
 
+/* Update the host window when there is a change to the framebuffer */
+
+static int up_updateearea(FAR struct fb_vtable_s *vtable,
+                          FAR const struct fb_area_s *area);
+
 /****************************************************************************
  * Private Data
  ****************************************************************************/
@@ -404,6 +409,44 @@ static int up_setcursor(FAR struct fb_vtable_s *vtable,
 #endif
 
 /****************************************************************************
+ * Name: up_updateearea
+ ****************************************************************************/
+
+static int up_updateearea(FAR struct fb_vtable_s *vtable,
+                          FAR const struct fb_area_s *area)
+{
+  FAR struct vnc_fbinfo_s *fbinfo = (FAR struct vnc_fbinfo_s *)vtable;
+  FAR struct vnc_session_s *session;
+  struct nxgl_rect_s rect;
+  int ret = OK;
+
+  DEBUGASSERT(fbinfo != NULL && area != NULL);
+
+  /* Recover the session information from the display number in the planeinfo
+   * structure.
+   */
+
+  DEBUGASSERT(fbinfo->display >= 0 && fbinfo->display < RFB_MAX_DISPLAYS);
+  session = g_vnc_sessions[fbinfo->display];
+
+  /* Verify that the session is still valid */
+
+  if (session != NULL && session->state == VNCSERVER_RUNNING)
+    {
+      /* Queue the rectangular update */
+
+      nxgl_area2rect(&rect, area);
+      ret = vnc_update_rectangle(session, &rect, true);
+      if (ret < 0)
+        {
+          gerr("ERROR: vnc_update_rectangle failed: %d\n", ret);
+        }
+    }
+
+  return ret;
+}
+
+/****************************************************************************
  * Name: vnc_start_server
  *
  * Description:
@@ -638,7 +681,7 @@ int up_fbinitialize(int display)
  * Description:
  *   Initialize the VNC frame buffer driver.  The VNC frame buffer driver
  *   supports two initialization interfaces:  The standard up_fbinitialize()
- *   that will be called from the graphics layer and this speical
+ *   that will be called from the graphics layer and this special
  *   initialization function that can be used only by VNC aware OS logic.
  *
  *   The two initialization functions may be called separated or together in
@@ -774,6 +817,7 @@ FAR struct fb_vtable_s *up_fbgetvplane(int display, int vplane)
           fbinfo->vtable.getcursor    = up_getcursor,
           fbinfo->vtable.setcursor    = up_setcursor,
 #endif
+          fbinfo->vtable.updatearea   = up_updateearea,
           fbinfo->display             = display;
           fbinfo->initialized         = true;
         }
@@ -821,55 +865,3 @@ void up_fbuninitialize(int display)
     }
 #endif
 }
-
-/****************************************************************************
- * Name: nx_notify_rectangle
- *
- * Description:
- *   When CONFIG_NX_UPDATE=y, then the graphics system will callout to
- *   inform some external module that the display has been updated.  This
- *   would be useful in a couple for cases.
- *
- *   - When a serial LCD is used, but a framebuffer is used to access the
- *     LCD.  In this case, the update callout can be used to refresh the
- *     affected region of the display.
- *
- *   - When VNC is enabled.  This is case, this callout is necessary to
- *     update the remote frame buffer to match the local framebuffer.
- *
- * When this feature is enabled, some external logic must provide this
- * interface.  This is the function that will handle the notification.  It
- * receives the rectangular region that was updated on the provided plane.
- *
- ****************************************************************************/
-
-#ifdef CONFIG_NX_UPDATE
-void nx_notify_rectangle(FAR NX_PLANEINFOTYPE *pinfo,
-                         FAR const struct nxgl_rect_s *rect)
-{
-  FAR struct vnc_session_s *session;
-  int ret;
-
-  DEBUGASSERT(pinfo != NULL && rect != NULL);
-
-  /* Recover the session information from the display number in the planeinfo
-   * structure.
-   */
-
-  DEBUGASSERT(pinfo->display >= 0 && pinfo->display < RFB_MAX_DISPLAYS);
-  session = g_vnc_sessions[pinfo->display];
-
-  /* Verify that the session is still valid */
-
-  if (session != NULL && session->state == VNCSERVER_RUNNING)
-    {
-      /* Queue the rectangular update */
-
-      ret = vnc_update_rectangle(session, rect, true);
-      if (ret < 0)
-        {
-          gerr("ERROR: vnc_update_rectangle failed: %d\n", ret);
-        }
-    }
-}
-#endif

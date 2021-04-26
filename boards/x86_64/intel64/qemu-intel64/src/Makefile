@@ -1,5 +1,5 @@
 ############################################################################
-# boards/x86_64/intel64/qemu/src/Makefile
+# boards/x86_64/intel64/qemu-intel64/src/Makefile
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -18,10 +18,9 @@
 #
 ############################################################################
 
--include $(TOPDIR)/Make.defs
+include $(TOPDIR)/Make.defs
 
-ASRCS =
-CSRCS = qemu_boot.c qemu_freq.c qemu_net.c
+CSRCS = qemu_boot.c qemu_bringup.c qemu_freq.c qemu_net.c
 
 ifeq ($(CONFIG_LIB_BOARDCTL),y)
   CSRCS += qemu_appinit.c

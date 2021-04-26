@@ -532,11 +532,11 @@ Configurations
        CONFIG_HOST_WINDOWS=y   : Windows Host
        CONFIG_WINDOWS_CYGWIN=y : Cygwin environment on windows
 
-  4. These configurations use the CodeSourcery toolchain.  But
+  4. These configurations use the ARM EABI toolchain.  But
      that is easily reconfigured:
 
      System Type -> Toolchain:
-       CONFIG_ARMV6M_TOOLCHAIN_CODESOURCERYW=y
+       CONFIG_ARMV6M_TOOLCHAIN_GNU_EABIW=y
 
      Any re-configuration should be done before making NuttX or else the
      subsequent 'make' will fail.  If you have already attempted building
@@ -562,7 +562,7 @@ Configuration sub-directories
     NOTES:
 
     1. This configuration is set up to build on Windows using the Cygwin
-       environment using the CodeSourcery toolchain.  This can be easily
+       environment using the ARM EABI toolchain.  This can be easily
        changed as described above under "Configurations."
 
     2. By default, this configuration provides a serial console on SERCOM4
@@ -608,7 +608,7 @@ Configuration sub-directories
          CONFIG_FAT_MAXFNAME=32            : Maximum supported file name length
 
          There are issues related to patents that Microsoft holds on FAT long
-         file name technologies.  See the top level COPYING file for further
+         file name technologies.  See the top level NOTICE file for further
          details.
 
        System Type -> Peripherals:

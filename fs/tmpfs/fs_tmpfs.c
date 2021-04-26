@@ -339,11 +339,6 @@ static int tmpfs_realloc_directory(FAR struct tmpfs_directory_s **tdo,
   newtdo->tdo_nentries = nentries;
   *tdo                 = newtdo;
 
-  /* Adjust the reference in the parent directory entry */
-
-  DEBUGASSERT(newtdo->tdo_dirent);
-  newtdo->tdo_dirent->tde_object = (FAR struct tmpfs_object_s *)newtdo;
-
   /* Return the index to the first, newly allocated directory entry */
 
   return ret;
@@ -662,7 +657,9 @@ static int tmpfs_create_file(FAR struct tmpfs_s *fs,
       name   = copy;
       parent = (FAR struct tmpfs_directory_s *)fs->tfs_root.tde_object;
 
-      /* Lock the root directory to emulate the behavior of tmpfs_find_directory() */
+      /* Lock the root directory to emulate the behavior of
+       * tmpfs_find_directory()
+       */
 
       ret = tmpfs_lock_directory(parent);
       if (ret < 0)
@@ -1175,7 +1172,9 @@ static int tmpfs_statfs_callout(FAR struct tmpfs_directory_s *tdo,
 
   DEBUGASSERT(to != NULL);
 
-  /* Accumulate statistics.  Save the total memory allocated for this object. */
+  /* Accumulate statistics.  Save the total memory allocated
+   * for this object.
+   */
 
   tmpbuf->tsf_alloc += to->to_alloc;
 
@@ -1271,7 +1270,7 @@ static int tmpfs_free_callout(FAR struct tmpfs_directory_s *tdo,
 
       if (tfo->tfo_refs > 0)
         {
-          /* Yes.. We cannot delete the file now.  Just mark it as unlinked. */
+          /* Yes.. We cannot delete the file now. Just mark it as unlinked. */
 
           tfo->tfo_flags |= TFO_FLAG_UNLINKED;
           return TMPFS_UNLINKED;
@@ -1322,7 +1321,7 @@ static int tmpfs_foreach(FAR struct tmpfs_directory_s *tdo,
            * action will be to delete the directory.
            */
 
-          ret = tmpfs_foreach(next, tmpfs_free_callout, NULL);
+          ret = tmpfs_foreach(next, callout, arg);
           if (ret < 0)
             {
               return -ECANCELED;
@@ -1963,7 +1962,7 @@ static int tmpfs_opendir(FAR struct inode *mountpt, FAR const char *relpath,
   if (ret >= 0)
     {
       dir->u.tmpfs.tf_tdo   = tdo;
-      dir->u.tmpfs.tf_index = 0;
+      dir->u.tmpfs.tf_index = tdo->tdo_nentries;
 
       tmpfs_unlock_directory(tdo);
     }
@@ -2023,7 +2022,7 @@ static int tmpfs_readdir(FAR struct inode *mountpt,
   /* Have we reached the end of the directory? */
 
   index = dir->u.tmpfs.tf_index;
-  if (index >= tdo->tdo_nentries)
+  if (index-- == 0)
     {
       /* We signal the end of the directory by returning the special error:
        * -ENOENT
@@ -2058,11 +2057,11 @@ static int tmpfs_readdir(FAR struct inode *mountpt,
 
       /* Copy the entry name */
 
-      strncpy(dir->fd_dir.d_name, tde->tde_name, NAME_MAX + 1);
+      strncpy(dir->fd_dir.d_name, tde->tde_name, NAME_MAX);
 
-      /* Increment the index for next time */
+      /* Save the index for next time */
 
-      dir->u.tmpfs.tf_index = index + 1;
+      dir->u.tmpfs.tf_index = index;
       ret = OK;
     }
 
@@ -2077,12 +2076,19 @@ static int tmpfs_readdir(FAR struct inode *mountpt,
 static int tmpfs_rewinddir(FAR struct inode *mountpt,
                            FAR struct fs_dirent_s *dir)
 {
+  FAR struct tmpfs_directory_s *tdo;
+
   finfo("mountpt: %p dir: %p\n",  mountpt, dir);
   DEBUGASSERT(mountpt != NULL && dir != NULL);
 
-  /* Set the readdir index to zero */
+  /* Get the directory structure from the dir argument and lock it */
 
-  dir->u.tmpfs.tf_index = 0;
+  tdo = dir->u.tmpfs.tf_tdo;
+  DEBUGASSERT(tdo != NULL);
+
+  /* Set the readdir index pass the end */
+
+  dir->u.tmpfs.tf_index = tdo->tdo_nentries;
   return OK;
 }
 

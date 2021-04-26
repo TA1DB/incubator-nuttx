@@ -31,11 +31,17 @@ CSRCS += lfs.c lfs_util.c
 DEPPATH += --dep-path littlefs/littlefs
 VPATH += :littlefs/littlefs
 
-LITTLEFS_VERSION ?= 2.2.1
+CFLAGS += -DLFS_TRACE=finfo
+CFLAGS += -DLFS_DEBUG=finfo
+CFLAGS += -DLFS_WARN=fwarn
+CFLAGS += -DLFS_ERROR=ferr
+CFLAGS += -DLFS_ASSERT=DEBUGASSERT
+
+LITTLEFS_VERSION ?= 2.4.0
 LITTLEFS_TARBALL = v$(LITTLEFS_VERSION).tar.gz
 
 $(LITTLEFS_TARBALL):
-	$(Q) wget -P littlefs https://github.com/ARMmbed/littlefs/archive/$(LITTLEFS_TARBALL)
+	$(Q) curl -L -o littlefs/$(LITTLEFS_TARBALL) https://github.com/ARMmbed/littlefs/archive/$(LITTLEFS_TARBALL)
 
 .littlefsunpack: $(LITTLEFS_TARBALL)
 	$(Q) tar zxf littlefs/$(LITTLEFS_TARBALL) -C littlefs

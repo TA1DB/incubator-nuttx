@@ -1,35 +1,20 @@
 /****************************************************************************
  * include/nuttx/fs/hostfs.h
  *
- *   Copyright (C) 2015 Ken Pettit. All rights reserved.
- *   Author: Ken Pettit <pettitkd@gmail.com>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -58,40 +43,52 @@
 
 /* These must exactly match the definitions from include/dirent.h: */
 
-#define NUTTX_DTYPE_FILE        0x01
-#define NUTTX_DTYPE_CHR         0x02
-#define NUTTX_DTYPE_BLK         0x04
-#define NUTTX_DTYPE_DIRECTORY   0x08
-#define NUTTX_DTYPE_LINK        0x10
+#define NUTTX_DTYPE_UNKNOWN     0
+#define NUTTX_DTYPE_FIFO        1
+#define NUTTX_DTYPE_CHR         2
+#define NUTTX_DTYPE_SEM         3
+#define NUTTX_DTYPE_DIRECTORY   4
+#define NUTTX_DTYPE_MQ          5
+#define NUTTX_DTYPE_BLK         6
+#define NUTTX_DTYPE_SHM         7
+#define NUTTX_DTYPE_FILE        8
+#define NUTTX_DTYPE_MTD         9
+#define NUTTX_DTYPE_LINK        10
+#define NUTTX_DTYPE_SOCK        12
 
 /* These must exactly match the definitions from include/sys/stat.h: */
 
-#define NUTTX_S_IFIFO           (0 << 11)
-#define NUTTX_S_IFCHR           (1 << 11)
-#define NUTTX_S_IFDIR           (2 << 11)
-#define NUTTX_S_IFBLK           (3 << 11)
-#define NUTTX_S_IFREG           (4 << 11)
-#define NUTTX_S_IFSOCK          (8 << 11)
-#define NUTTX_S_IFLNK           (1 << 15)
+#define NUTTX_S_IFIFO           (1 << 12)
+#define NUTTX_S_IFCHR           (2 << 12)
+#define NUTTX_S_IFSEM           (3 << 12)
+#define NUTTX_S_IFDIR           (4 << 12)
+#define NUTTX_S_IFMQ            (5 << 12)
+#define NUTTX_S_IFBLK           (6 << 12)
+#define NUTTX_S_IFSHM           (7 << 12)
+#define NUTTX_S_IFREG           (8 << 12)
+#define NUTTX_S_IFMTD           (9 << 12)
+#define NUTTX_S_IFLNK           (10 << 12)
+#define NUTTX_S_IFSOCK          (12 << 12)
+#define NUTTX_S_IFMT            (15 << 12)
 
 /* These must exactly match the definitions from include/fcntl.h: */
 
-#define NUTTX_O_RDONLY   (1 << 0)  /* Open for read access (only) */
-#define NUTTX_O_WRONLY   (1 << 1)  /* Open for write access (only) */
-#define NUTTX_O_CREAT    (1 << 2)  /* Create file/sem/mq object */
-#define NUTTX_O_EXCL     (1 << 3)  /* Name must not exist when opened  */
-#define NUTTX_O_APPEND   (1 << 4)  /* Keep contents, append to end */
-#define NUTTX_O_TRUNC    (1 << 5)  /* Delete contents */
-#define NUTTX_O_NONBLOCK (1 << 6)  /* Don't wait for data */
-#define NUTTX_O_SYNC     (1 << 7)  /* Synchronize output on write */
-#define NUTTX_O_BINARY   (1 << 8)  /* Open the file in binary mode. */
-#define NUTTX_O_DIRECT   (1 << 9)  /* Avoid caching, write directly to hardware */
+#define NUTTX_O_RDONLY          (1 << 0)  /* Open for read access (only) */
+#define NUTTX_O_WRONLY          (1 << 1)  /* Open for write access (only) */
+#define NUTTX_O_CREAT           (1 << 2)  /* Create file/sem/mq object */
+#define NUTTX_O_EXCL            (1 << 3)  /* Name must not exist when opened  */
+#define NUTTX_O_APPEND          (1 << 4)  /* Keep contents, append to end */
+#define NUTTX_O_TRUNC           (1 << 5)  /* Delete contents */
+#define NUTTX_O_NONBLOCK        (1 << 6)  /* Don't wait for data */
+#define NUTTX_O_SYNC            (1 << 7)  /* Synchronize output on write */
+#define NUTTX_O_BINARY          (1 << 8)  /* Open the file in binary mode. */
+#define NUTTX_O_DIRECT          (1 << 9)  /* Avoid caching, write directly to hardware */
 
-#define NUTTX_O_RDWR     (NUTTX_O_RDONLY | NUTTX_O_WRONLY)
+#define NUTTX_O_RDWR            (NUTTX_O_RDONLY | NUTTX_O_WRONLY)
 
 /* Should match definition in include/limits.h */
 
-#define NUTTX_NAME_MAX   CONFIG_NAME_MAX
+#define NUTTX_NAME_MAX          CONFIG_NAME_MAX
 
 #endif /* __SIM__ */
 
@@ -117,6 +114,12 @@ typedef uintptr_t    nuttx_size_t;
 /* These must match the definition in include/time.h */
 
 typedef uint32_t     nuttx_time_t;
+
+struct nuttx_timespec
+{
+    nuttx_time_t tv_sec;
+    long tv_nsec;
+};
 
 /* These must exactly match the definition from include/dirent.h: */
 
@@ -144,19 +147,19 @@ struct nuttx_statfs_s
 
 struct nuttx_stat_s
 {
-  nuttx_dev_t     st_dev;     /* Device ID of device containing file */
-  nuttx_ino_t     st_ino;     /* File serial number */
-  nuttx_mode_t    st_mode;    /* File type, attributes, and access mode bits */
-  nuttx_nlink_t   st_nlink;   /* Number of hard links to the file */
-  nuttx_uid_t     st_uid;     /* User ID of file */
-  nuttx_gid_t     st_gid;     /* Group ID of file */
-  nuttx_dev_t     st_rdev;    /* Device ID (if file is character or block special) */
-  nuttx_off_t     st_size;    /* Size of file/directory, in bytes */
-  nuttx_time_t    st_atim;    /* Time of last access */
-  nuttx_time_t    st_mtim;    /* Time of last modification */
-  nuttx_time_t    st_ctim;    /* Time of last status change */
-  nuttx_blksize_t st_blksize; /* Block size used for filesystem I/O */
-  nuttx_blkcnt_t  st_blocks;  /* Number of blocks allocated */
+  nuttx_dev_t           st_dev;     /* Device ID of device containing file */
+  nuttx_ino_t           st_ino;     /* File serial number */
+  nuttx_mode_t          st_mode;    /* File type, attributes, and access mode bits */
+  nuttx_nlink_t         st_nlink;   /* Number of hard links to the file */
+  nuttx_uid_t           st_uid;     /* User ID of file */
+  nuttx_gid_t           st_gid;     /* Group ID of file */
+  nuttx_dev_t           st_rdev;    /* Device ID (if file is character or block special) */
+  nuttx_off_t           st_size;    /* Size of file/directory, in bytes */
+  struct nuttx_timespec st_atim;    /* Time of last access */
+  struct nuttx_timespec st_mtim;    /* Time of last modification */
+  struct nuttx_timespec st_ctim;    /* Time of last status change */
+  nuttx_blksize_t       st_blksize; /* Block size used for filesystem I/O */
+  nuttx_blkcnt_t        st_blocks;  /* Number of blocks allocated */
 };
 
 #endif /* __SIM__ */

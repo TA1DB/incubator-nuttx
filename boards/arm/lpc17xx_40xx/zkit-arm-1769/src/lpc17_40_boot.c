@@ -49,8 +49,8 @@
 #include <nuttx/board.h>
 #include <arch/board/board.h>
 
-#include "up_arch.h"
-#include "up_internal.h"
+#include "arm_arch.h"
+#include "arm_internal.h"
 
 #include "zkit-arm-1769.h"
 
@@ -70,7 +70,8 @@
  * Name: lpc17_40_boardinitialize
  *
  * Description:
- *   All LPC17xx/LPC40xx architectures must provide the following entry point.
+ *   All LPC17xx/LPC40xx architectures must provide the following entry
+ *   point.
  *   This entry point is called early in the initialization -- after all
  *   memory has been configured and mapped but before any devices have been
  *   initialized.

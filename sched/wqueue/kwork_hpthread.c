@@ -1,5 +1,5 @@
 /****************************************************************************
- * sched/wqueue/work_hpthread.c
+ * sched/wqueue/kwork_hpthread.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -115,7 +115,7 @@ static int work_hpthread(int argc, char *argv[])
  ****************************************************************************/
 
 /****************************************************************************
- * Name: work_hpstart
+ * Name: work_start_highpri
  *
  * Description:
  *   Start the high-priority, kernel-mode worker thread(s)
@@ -129,7 +129,7 @@ static int work_hpthread(int argc, char *argv[])
  *
  ****************************************************************************/
 
-int work_hpstart(void)
+int work_start_highpri(void)
 {
   pid_t pid;
   int wndx;

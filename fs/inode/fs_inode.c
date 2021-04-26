@@ -87,14 +87,9 @@ void inode_initialize(void)
   g_inode_sem.holder = NO_HOLDER;
   g_inode_sem.count  = 0;
 
-  /* Initialize files array (if it is used) */
+  /* Reserve the root node */
 
-#ifdef CONFIG_HAVE_WEAKFUNCTIONS
-  if (files_initialize != NULL)
-#endif
-    {
-      files_initialize();
-    }
+  inode_root_reserve();
 }
 
 /****************************************************************************

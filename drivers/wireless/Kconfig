@@ -34,8 +34,14 @@ config WL_GS2200M
 	default n
 	select SPI
 	select LIBC_SCANSET
+	select SCHED_LPWORK
+	select DRIVERS_IEEE80211
 
 if WL_GS2200M
+
+config WL_GS2200M_ENABLE_WEP
+	bool "WEP support in AP mode"
+	default false
 
 config WL_GS2200M_SPI_FREQUENCY
 	int "SPI frequency for GS2200M"
@@ -80,7 +86,6 @@ source drivers/wireless/ieee80211/Kconfig
 menuconfig DRIVERS_BLUETOOTH
 	bool "Bluetooth Device Support"
 	default n
-	depends on WIRELESS_BLUETOOTH
 	---help---
 		Select to enable building of Bluetooth device drivers.
 

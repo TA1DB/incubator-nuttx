@@ -1,5 +1,5 @@
 /****************************************************************************
- * libs/libc/hex2bin/hex2bin.c
+ * libs/libc/hex2bin/lib_hex2bin.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -41,6 +41,8 @@
 #include <hex2bin.h>
 
 #include <nuttx/streams.h>
+
+#include "libc.h"
 
 #ifdef CONFIG_LIB_HEX2BIN
 
@@ -413,7 +415,7 @@ int hex2bin(FAR struct lib_instream_s *instream,
   uint32_t address;
   uint32_t endaddr;
   uint32_t expected;
-  uint16_t extension;
+  uint32_t extension;
   uint16_t address16;
   uint8_t checksum;
   unsigned int lineno;
@@ -422,7 +424,7 @@ int hex2bin(FAR struct lib_instream_s *instream,
 
   /* Allocate buffer memory */
 
-  alloc = (FAR uint8_t *)malloc(LINE_ALLOC + BIN_ALLOC);
+  alloc = (FAR uint8_t *)lib_malloc(LINE_ALLOC + BIN_ALLOC);
   if (alloc == NULL)
     {
       lerr("ERROR: Failed to allocate memory\n");
@@ -570,7 +572,7 @@ int hex2bin(FAR struct lib_instream_s *instream,
 
             /* Get and verify the full 32-bit address */
 
-            address = ((uint32_t)extension << 16) | (uint32_t)address16;
+            address = extension + (uint32_t)address16;
             endaddr = address + bytecount;
 
             if (address < baseaddr || (endpaddr != 0 && endaddr >= endpaddr))
@@ -645,7 +647,7 @@ int hex2bin(FAR struct lib_instream_s *instream,
               goto errout_with_einval;
             }
 
-          extension = (uint16_t)bin[DATA_BINNDX];
+          extension = (uint32_t)bin[DATA_BINNDX] << 12;
           break;
 
         case RECORD_START_SEGADDR: /* Start segment address record */
@@ -678,8 +680,8 @@ int hex2bin(FAR struct lib_instream_s *instream,
               goto errout_with_einval;
             }
 
-          extension = (uint16_t)bin[DATA_BINNDX] << 8 |
-                      (uint16_t)bin[DATA_BINNDX + 1];
+          extension = (uint32_t)bin[DATA_BINNDX] << 24 |
+                      (uint32_t)bin[DATA_BINNDX + 1] << 16;
           break;
 
         case RECORD_START_LINADDR: /* Start linear address record */
@@ -703,7 +705,7 @@ errout_with_einval:
 
 errout_with_buffers:
 exit_with_buffers:
-  free(alloc);
+  lib_free(alloc);
   return ret;
 }
 

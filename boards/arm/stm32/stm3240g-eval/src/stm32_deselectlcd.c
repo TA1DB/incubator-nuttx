@@ -1,5 +1,5 @@
 /****************************************************************************
- * boards/arm/stm32/stm3210e-eval/src/stm32_deselectlcd.c
+ * boards/arm/stm32/stm3240g-eval/src/stm32_deselectlcd.c
  *
  *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
@@ -42,7 +42,7 @@
 
 #include <debug.h>
 
-#include "up_arch.h"
+#include "arm_arch.h"
 #include "stm32.h"
 #include "stm3240g-eval.h"
 

@@ -1,35 +1,20 @@
 /****************************************************************************
  * arch/x86/src/common/up_assert.c
  *
- *   Copyright (C) 2011-2016, 2018 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -60,6 +45,7 @@
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+
 /* USB trace dumping */
 
 #ifndef CONFIG_USBDEV_TRACE
@@ -87,13 +73,13 @@ static uint32_t s_last_regs[XCPTCONTEXT_REGS];
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_STACKDUMP
-static void up_stackdump(uint32_t sp, uint32_t stack_base)
+static void up_stackdump(uint32_t sp, uint32_t stack_top)
 {
   uint32_t stack ;
 
-  for (stack = sp & ~0x1f; stack < stack_base; stack += 32)
+  for (stack = sp & ~0x1f; stack < stack_top; stack += 32)
     {
-      uint32_t *ptr = (uint32_t*)stack;
+      uint32_t *ptr = (uint32_t *)stack;
       _alert("%08x: %08x %08x %08x %08x %08x %08x %08x %08x\n",
             stack, ptr[0], ptr[1], ptr[2], ptr[3],
             ptr[4], ptr[5], ptr[6], ptr[7]);
@@ -111,14 +97,13 @@ static void up_stackdump(uint32_t sp, uint32_t stack_base)
 static int usbtrace_syslog(FAR const char *fmt, ...)
 {
   va_list ap;
-  int ret;
 
-  /* Let nx_vsyslog do the real work */
+  /* Let vsyslog do the real work */
 
   va_start(ap, fmt);
-  ret = nx_vsyslog(LOG_EMERG, fmt, &ap);
+  vsyslog(LOG_EMERG, fmt, ap);
   va_end(ap);
-  return ret;
+  return OK;
 }
 
 static int assert_tracecallback(FAR struct usbtrace_s *trace, FAR void *arg)
@@ -136,7 +121,7 @@ static int assert_tracecallback(FAR struct usbtrace_s *trace, FAR void *arg)
 static void up_dumpstate(void)
 {
   struct tcb_s *rtcb = running_task();
-  uint32_t sp = up_getsp();
+  uint32_t sp = x86_getsp();
   uint32_t ustackbase;
   uint32_t ustacksize;
 #if CONFIG_ARCH_INTERRUPTSTACK > 3
@@ -148,7 +133,7 @@ static void up_dumpstate(void)
 
   if (g_current_regs != NULL)
     {
-      up_registerdump((uint32_t*)g_current_regs);
+      up_registerdump((uint32_t *)g_current_regs);
     }
   else
     {
@@ -160,22 +145,14 @@ static void up_dumpstate(void)
 
   /* Get the limits on the user stack memory */
 
-  if (rtcb->pid == 0) /* Check for CPU0 IDLE thread */
-    {
-      ustackbase = g_idle_topstack - 4;
-      ustacksize = CONFIG_IDLETHREAD_STACKSIZE;
-    }
-  else
-    {
-      ustackbase = (uint32_t)rtcb->adj_stack_ptr;
-      ustacksize = (uint32_t)rtcb->adj_stack_size;
-    }
+  ustackbase = (uint32_t)rtcb->stack_base_ptr;
+  ustacksize = (uint32_t)rtcb->adj_stack_size;
 
   /* Get the limits on the interrupt stack memory */
 
 #if CONFIG_ARCH_INTERRUPTSTACK > 3
-  istackbase = (uint32_t)&g_intstackbase;
-  istacksize = (CONFIG_ARCH_INTERRUPTSTACK & ~3) - 4;
+  istackbase = (uint32_t)&g_intstackalloc;
+  istacksize = (CONFIG_ARCH_INTERRUPTSTACK & ~3);
 
   /* Show interrupt stack info */
 
@@ -188,23 +165,23 @@ static void up_dumpstate(void)
    * stack?
    */
 
-  if (sp <= istackbase && sp > istackbase - istacksize)
+  if (sp >= istackbase && sp < istackbase + istacksize)
     {
       /* Yes.. dump the interrupt stack */
 
-      up_stackdump(sp, istackbase);
+      up_stackdump(sp, istackbase + istacksize);
 
       /* Extract the user stack pointer which should lie
        * at the base of the interrupt stack.
        */
 
-      sp = g_intstackbase;
+      sp = g_intstacktop;
       _alert("sp:     %08x\n", sp);
     }
   else if (g_current_regs)
     {
       _alert("ERROR: Stack pointer is not within the interrupt stack\n");
-      up_stackdump(istackbase - istacksize, istackbase);
+      up_stackdump(istackbase, istackbase + istacksize);
     }
 
   /* Show user stack info */
@@ -222,14 +199,14 @@ static void up_dumpstate(void)
    * stack memory.
    */
 
-  if (sp > ustackbase || sp <= ustackbase - ustacksize)
+  if (sp >= ustackbase && sp < ustackbase + ustacksize)
     {
-      _alert("ERROR: Stack pointer is not within allocated stack\n");
-      up_stackdump(ustackbase - ustacksize, ustackbase);
+      up_stackdump(sp, ustackbase + ustacksize);
     }
   else
     {
-      up_stackdump(sp, ustackbase);
+      _alert("ERROR: Stack pointer is not within allocated stack\n");
+      up_stackdump(ustackbase, ustackbase + ustacksize);
     }
 
 #ifdef CONFIG_ARCH_USBDUMP
@@ -246,8 +223,7 @@ static void up_dumpstate(void)
  * Name: _up_assert
  ****************************************************************************/
 
-static void _up_assert(int errorcode) noreturn_function;
-static void _up_assert(int errorcode)
+static void _up_assert(void)
 {
   /* Flush any buffered SYSLOG data */
 
@@ -257,26 +233,25 @@ static void _up_assert(int errorcode)
 
   if (g_current_regs || (running_task())->flink == NULL)
     {
-       up_irq_save();
-        for (;;)
-          {
+      up_irq_save();
+      for (; ; )
+        {
 #if CONFIG_BOARD_RESET_ON_ASSERT >= 1
-            board_reset(CONFIG_BOARD_ASSERT_RESET_VALUE);
+          board_reset(CONFIG_BOARD_ASSERT_RESET_VALUE);
 #endif
 #ifdef CONFIG_ARCH_LEDS
-            board_autoled_on(LED_PANIC);
-            up_mdelay(250);
-            board_autoled_off(LED_PANIC);
-            up_mdelay(250);
+          board_autoled_on(LED_PANIC);
+          up_mdelay(250);
+          board_autoled_off(LED_PANIC);
+          up_mdelay(250);
 #endif
-          }
+        }
     }
   else
     {
 #if CONFIG_BOARD_RESET_ON_ASSERT >= 2
       board_reset(CONFIG_BOARD_ASSERT_RESET_VALUE);
 #endif
-      exit(errorcode);
     }
 }
 
@@ -288,7 +263,7 @@ static void _up_assert(int errorcode)
  * Name: up_assert
  ****************************************************************************/
 
-void up_assert(const uint8_t *filename, int lineno)
+void up_assert(const char *filename, int lineno)
 {
 #if CONFIG_TASK_NAME_SIZE > 0 && defined(CONFIG_DEBUG_ALERT)
   struct tcb_s *rtcb = running_task();
@@ -315,8 +290,8 @@ void up_assert(const uint8_t *filename, int lineno)
   syslog_flush();
 
 #ifdef CONFIG_BOARD_CRASHDUMP
-  board_crashdump(up_getsp(), running_task(), filename, lineno);
+  board_crashdump(x86_getsp(), running_task(), filename, lineno);
 #endif
 
-  _up_assert(EXIT_FAILURE);
+  _up_assert();
 }

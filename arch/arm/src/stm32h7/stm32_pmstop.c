@@ -41,7 +41,7 @@
 
 #include <stdbool.h>
 
-#include "up_arch.h"
+#include "arm_arch.h"
 #include "nvic.h"
 #include "stm32_pwr.h"
 #include "stm32_pm.h"
@@ -117,7 +117,9 @@ void stm32_pmstop(bool lpds)
   asm volatile ("wfi");
 #endif
 
-  /* Clear deep sleep bits, so that MCU does not go into deep sleep in idle. */
+  /* Clear deep sleep bits, so that MCU does not go into deep sleep in
+   * idle.
+   */
 
   /* Clear SLEEPDEEP bit of Cortex System Control Register */
 

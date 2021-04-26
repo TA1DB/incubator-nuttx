@@ -1,35 +1,20 @@
 /****************************************************************************
  * arch/arm/src/s32k1xx/s32k1xx_rtc.c
  *
- *   Copyright (C) 2018 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -52,7 +37,7 @@
 
 #include <arch/board/board.h>
 
-#include "up_arch.h"
+#include "arm_arch.h"
 
 #include "hardware/s32k1xx_rtc.h"
 #include "s32k1xx_periphclocks.h"
@@ -157,11 +142,11 @@ int up_rtc_initialize(void)
 
   putreg32(regval, S32K1XX_RTC_CR);
 
-  /* Set LPO_1KHZ clock source */
+  /* Increment on 32.768Khz clock */
 
   regval  = getreg32(S32K1XX_RTC_CR);
 
-  regval |= RTC_CR_LPOS;
+  regval &= ~RTC_CR_LPOS;
 
   putreg32(regval, S32K1XX_RTC_CR);
 
@@ -180,6 +165,18 @@ int up_rtc_initialize(void)
   regval &= ~(RTC_CR_SUP);
 
   putreg32(regval, S32K1XX_RTC_CR);
+
+  regval  = getreg32(S32K1XX_RTC_SR);
+
+  if (regval & RTC_SR_TIF)
+    {
+      regval &= ~RTC_SR_TCE;
+      putreg32(regval, S32K1XX_RTC_SR);
+
+      /* Write TSR register to clear invalid */
+
+      putreg32(0x0, S32K1XX_RTC_TSR);
+    }
 
   /* Enable the rtc */
 
@@ -207,7 +204,7 @@ int up_rtc_initialize(void)
  *   The current time in seconds
  *
  ****************************************************************************/
-
+#ifndef CONFIG_RTC_HIRES
 time_t up_rtc_time(void)
 {
   uint32_t regval;
@@ -217,6 +214,55 @@ time_t up_rtc_time(void)
 
   return (uint32_t) (regval);
 }
+#endif
+
+/****************************************************************************
+ * Name: up_rtc_gettime
+ *
+ * Description:
+ *   Get the current time from the high resolution RTC clock/counter.  This
+ *   interface is only supported by the high-resolution RTC/counter hardware
+ *   implementation. It is used to replace the system timer.
+ *
+ * Input Parameters:
+ *   tp - The location to return the high resolution time value.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno on failure
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_RTC_HIRES
+int up_rtc_gettime(FAR struct timespec *tp)
+{
+  irqstate_t flags;
+  uint32_t seconds;
+  uint32_t prescaler;
+  uint32_t prescaler2;
+
+  /* Get prescaler and seconds register. this is in a loop which ensures that
+   * registers will be re-read if during the reads the prescaler has
+   * wrapped-around.
+   */
+
+  flags = enter_critical_section();
+  do
+    {
+      prescaler = getreg32(S32K1XX_RTC_TPR);
+      seconds = getreg32(S32K1XX_RTC_TSR);
+      prescaler2 = getreg32(S32K1XX_RTC_TPR);
+    }
+  while (prescaler > prescaler2);
+
+  leave_critical_section(flags);
+
+  /* Build seconds + nanoseconds from seconds and prescaler register */
+
+  tp->tv_sec = seconds;
+  tp->tv_nsec = prescaler * (1000000000 / CONFIG_RTC_FREQUENCY);
+  return OK;
+}
+#endif
 
 /****************************************************************************
  * Name: up_rtc_settime
@@ -237,11 +283,27 @@ int up_rtc_settime(FAR const struct timespec *ts)
 {
   DEBUGASSERT(ts != NULL);
 
+  irqstate_t flags;
+  uint32_t seconds;
+  uint32_t prescaler;
+
+  seconds = ts->tv_sec;
+#ifdef CONFIG_RTC_HIRES
+  prescaler = ts->tv_nsec / (1000000000 / CONFIG_RTC_FREQUENCY);
+#else
+  prescaler = 0;
+#endif
+
+  flags = enter_critical_section();
+
   s32k1xx_rtc_disable();
 
-  putreg32((uint32_t)ts->tv_sec, S32K1XX_RTC_TSR);
+  putreg32(prescaler, S32K1XX_RTC_TPR); /* Always write prescaler first */
+  putreg32(seconds, S32K1XX_RTC_TSR);
 
   s32k1xx_rtc_enable();
+
+  leave_critical_section(flags);
 
   return OK;
 }

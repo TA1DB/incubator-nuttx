@@ -1,35 +1,20 @@
 /****************************************************************************
  * arch/avr/src/avr/up_spi.c
  *
- *   Copyright (C) 2011, 2016-2017 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -40,6 +25,7 @@
 #include <nuttx/config.h>
 
 #include <sys/types.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <errno.h>
@@ -188,11 +174,15 @@ static uint32_t spi_setfrequency(FAR struct spi_dev_s *dev,
   FAR struct avr_spidev_s *priv = (FAR struct avr_spidev_s *)dev;
   uint32_t actual;
 
+  /* TODO: This is missing the actual logic to update the frequency.
+   * The divider bits are computed but not actually used.
+   */
+
   /* Has the request frequency changed? */
 
   if (frequency != priv->frequency)
     {
-      /* Read the SPI status and control registers, clearing all divider bits */
+      /* Read the SPI status and control registers, clearing all div bits */
 
       uint8_t spcr = SPCR & ~((1 << SPR0) | (1 << SPR1));
       uint8_t spsr = SPSR & ~(1 << SPI2X);
@@ -236,8 +226,6 @@ static uint32_t spi_setfrequency(FAR struct spi_dev_s *dev,
           actual = BOARD_CPU_CLOCK / 128;
         }
 
-#warning REVISIT: spcr/spsr are never used
-
       /* Save the frequency setting */
 
       priv->frequency = frequency;
@@ -248,7 +236,7 @@ static uint32_t spi_setfrequency(FAR struct spi_dev_s *dev,
       actual          = priv->actual;
     }
 
-  spiinfo("Frequency %d->%d\n", frequency, actual);
+  spiinfo("Frequency %" PRId32 "->%" PRId32 "\n", frequency, actual);
   return actual;
 }
 
@@ -306,7 +294,7 @@ static void spi_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode)
 
       SPSR = regval;
 
-      /* Save the mode so that subsequent re-configuratins will be faster */
+      /* Save the mode so that subsequent re-configurations will be faster */
 
       priv->mode = mode;
     }
@@ -320,7 +308,7 @@ static void spi_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode)
  *
  * Input Parameters:
  *   dev -  Device-specific state data
- *   nbits - The number of bits requests (only nbits == 8 is supported)
+ *   nbits - The number of bits requested (only nbits == 8 is supported)
  *
  * Returned Value:
  *   none

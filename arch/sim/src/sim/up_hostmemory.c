@@ -22,10 +22,16 @@
  * Included Files
  ****************************************************************************/
 
-#include <sys/mman.h>
-
-#include <stdio.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <string.h>
 #include <stdlib.h>
+
+#include <sys/mman.h>
+#include <sys/stat.h>
+
+#include "up_internal.h"
 
 /****************************************************************************
  * Public Functions
@@ -47,8 +53,100 @@ void *host_alloc_heap(size_t sz)
            MAP_ANON | MAP_PRIVATE, -1, 0);
   if (p == MAP_FAILED)
     {
-      perror("Failed to allocate heap with mmap");
-      exit(EXIT_FAILURE);
+      return NULL;
+    }
+
+  return p;
+}
+
+void *host_alloc_shmem(const char *name, size_t size, int master)
+{
+  void *mem;
+  int oflag;
+  int ret;
+  int fd;
+
+  oflag = O_RDWR;
+  if (master)
+    {
+      oflag |= O_CREAT | O_TRUNC;
+    }
+
+  while (1)
+    {
+      fd = shm_open(name, oflag, S_IRUSR | S_IWUSR);
+      if (fd >= 0)
+        {
+          if (!master)
+            {
+              /* Avoid the second slave instance open successfully */
+
+              shm_unlink(name);
+            }
+          break;
+        }
+
+      if (master || errno != ENOENT)
+        {
+          return NULL;
+        }
+
+      /* Master isn't ready, sleep and try again */
+
+      usleep(1000);
+    }
+
+  ret = ftruncate(fd, size);
+  if (ret < 0)
+    {
+      close(fd);
+      return NULL;
+    }
+
+  mem = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  close(fd); /* Don't need keep fd any more once the memory get mapped */
+  if (mem == MAP_FAILED)
+    {
+      return NULL;
+    }
+
+  return mem;
+}
+
+void host_free_shmem(void *mem)
+{
+  munmap(mem, 0);
+}
+
+void *host_malloc(size_t size)
+{
+  return malloc(size);
+}
+
+void host_free(void *mem)
+{
+  free(mem);
+}
+
+void *host_realloc(void *oldmem, size_t size)
+{
+  return realloc(oldmem, size);
+}
+
+void *host_calloc(size_t n, size_t elem_size)
+{
+  return calloc(n , elem_size);
+}
+
+void *host_memalign(size_t alignment, size_t size)
+{
+  void *p;
+  int error;
+
+  error = posix_memalign(&p, alignment, size);
+  if (error != 0)
+    {
+      return NULL;
     }
 
   return p;

@@ -170,10 +170,10 @@ static inline void usbhost_requestsensecbw(FAR struct usbmsc_cbw_s *cbw);
 static inline void usbhost_testunitreadycbw(FAR struct usbmsc_cbw_s *cbw);
 static inline void usbhost_readcapacitycbw(FAR struct usbmsc_cbw_s *cbw);
 static inline void usbhost_inquirycbw (FAR struct usbmsc_cbw_s *cbw);
-static inline void usbhost_readcbw (size_t startsector, uint16_t blocksize,
+static inline void usbhost_readcbw (blkcnt_t startsector, uint16_t blocksize,
                                     unsigned int nsectors,
                                     FAR struct usbmsc_cbw_s *cbw);
-static inline void usbhost_writecbw(size_t startsector, uint16_t blocksize,
+static inline void usbhost_writecbw(blkcnt_t startsector, uint16_t blocksize,
                                     unsigned int nsectors,
                                     FAR struct usbmsc_cbw_s *cbw);
 
@@ -231,11 +231,11 @@ static int usbhost_disconnected(FAR struct usbhost_class_s *usbclass);
 static int usbhost_open(FAR struct inode *inode);
 static int usbhost_close(FAR struct inode *inode);
 static ssize_t usbhost_read(FAR struct inode *inode,
-                            FAR unsigned char *buffer, size_t startsector,
+                            FAR unsigned char *buffer, blkcnt_t startsector,
                             unsigned int nsectors);
 static ssize_t usbhost_write(FAR struct inode *inode,
                              FAR const unsigned char *buffer,
-                             size_t startsector, unsigned int nsectors);
+                             blkcnt_t startsector, unsigned int nsectors);
 static int usbhost_geometry(FAR struct inode *inode,
                             FAR struct geometry *geometry);
 static int usbhost_ioctl(FAR struct inode *inode, int cmd,
@@ -482,7 +482,7 @@ static int usbhost_allocdevno(FAR struct usbhost_state_s *priv)
 
 static void usbhost_freedevno(FAR struct usbhost_state_s *priv)
 {
-  int devno = 'a' - priv->sdchar;
+  int devno = priv->sdchar - 'a';
 
   if (devno >= 0 && devno < 26)
     {
@@ -629,7 +629,7 @@ static inline void usbhost_inquirycbw (FAR struct usbmsc_cbw_s *cbw)
 }
 
 static inline void
-usbhost_readcbw (size_t startsector, uint16_t blocksize,
+usbhost_readcbw (blkcnt_t startsector, uint16_t blocksize,
                  unsigned int nsectors, FAR struct usbmsc_cbw_s *cbw)
 {
   FAR struct scsicmd_read10_s *rd10;
@@ -651,7 +651,7 @@ usbhost_readcbw (size_t startsector, uint16_t blocksize,
 }
 
 static inline void
-usbhost_writecbw(size_t startsector, uint16_t blocksize,
+usbhost_writecbw(blkcnt_t startsector, uint16_t blocksize,
                  unsigned int nsectors, FAR struct usbmsc_cbw_s *cbw)
 {
   FAR struct scsicmd_write10_s *wr10;
@@ -1400,6 +1400,14 @@ static inline int usbhost_initvolume(FAR struct usbhost_state_s *priv)
 
       ret = -ENODEV;
     }
+#  ifdef CONFIG_USBHOST_MSC_NOTIFIER
+  else
+    {
+      /* Signal the connect */
+
+      usbhost_msc_notifier_signal(WORK_USB_MSC_CONNECT, priv->sdchar);
+    }
+#  endif
 
   /* Release the semaphore... there is a race condition here.
    * Decrementing the reference count and releasing the semaphore
@@ -1409,6 +1417,7 @@ static inline int usbhost_initvolume(FAR struct usbhost_state_s *priv)
    */
 
   usbhost_givesem(&priv->exclsem);
+
   return ret;
 }
 
@@ -1848,6 +1857,12 @@ static int usbhost_disconnected(struct usbhost_class_s *usbclass)
 
   DEBUGASSERT(priv != NULL);
 
+#  ifdef CONFIG_USBHOST_MSC_NOTIFIER
+  /* Signal the disconnect */
+
+  usbhost_msc_notifier_signal(WORK_USB_MSC_DISCONNECT, priv->sdchar);
+#  endif
+
   /* Set an indication to any users of the mass storage device that the
    * device is no longer available.
    */
@@ -2009,7 +2024,7 @@ static int usbhost_close(FAR struct inode *inode)
  ****************************************************************************/
 
 static ssize_t usbhost_read(FAR struct inode *inode, unsigned char *buffer,
-                            size_t startsector, unsigned int nsectors)
+                            blkcnt_t startsector, unsigned int nsectors)
 {
   FAR struct usbhost_state_s *priv;
   FAR struct usbhost_hubport_s *hport;
@@ -2022,7 +2037,7 @@ static ssize_t usbhost_read(FAR struct inode *inode, unsigned char *buffer,
   DEBUGASSERT(priv->usbclass.hport);
   hport = priv->usbclass.hport;
 
-  uinfo("startsector: %d nsectors: %d sectorsize: %d\n",
+  uinfo("startsector: %" PRIu32 " nsectors: %u sectorsize: %" PRIu16 "\n",
         startsector, nsectors, priv->blocksize);
 
   /* Check if the mass storage device is still connected */
@@ -2122,14 +2137,14 @@ static ssize_t usbhost_read(FAR struct inode *inode, unsigned char *buffer,
 
 static ssize_t usbhost_write(FAR struct inode *inode,
                              FAR const unsigned char *buffer,
-                             size_t startsector, unsigned int nsectors)
+                             blkcnt_t startsector, unsigned int nsectors)
 {
   FAR struct usbhost_state_s *priv;
   FAR struct usbhost_hubport_s *hport;
   ssize_t nbytes;
   int ret;
 
-  uinfo("sector: %d nsectors: %d sectorsize: %d\n");
+  uinfo("sector: %" PRIu32 " nsectors: %u\n", startsector, nsectors);
 
   DEBUGASSERT(inode && inode->i_private);
   priv = (FAR struct usbhost_state_s *)inode->i_private;
@@ -2256,7 +2271,7 @@ static int usbhost_geometry(FAR struct inode *inode,
           geometry->geo_sectorsize    = priv->blocksize;
           usbhost_givesem(&priv->exclsem);
 
-          uinfo("nsectors: %ld sectorsize: %d\n",
+          uinfo("nsectors: %ld sectorsize: %" PRIi16 "n",
                  (long)geometry->geo_nsectors, geometry->geo_sectorsize);
         }
     }
@@ -2359,5 +2374,99 @@ int usbhost_msc_initialize(void)
 
   return usbhost_registerclass(&g_storage);
 }
+
+#  ifdef CONFIG_USBHOST_MSC_NOTIFIER
+
+/****************************************************************************
+ * Name: usbhost_msc_notifier_setup
+ *
+ * Description:
+ *   Set up to perform a callback to the worker function when a mass storage
+ *   device is attached.
+ *
+ * Input Parameters:
+ *   worker - The worker function to execute on the low priority work queue
+ *            when the event occurs.
+ *   event  - Currently only USBHOST_MSC_DISCONNECT and USBHOST_MSC_CONNECT
+ *   sdchar - sdchar of the connected or disconnected block device
+ *   arg    - A user-defined argument that will be available to the worker
+ *            function when it runs.
+ *
+ * Returned Value:
+ *   > 0   - The notification is in place. The returned value is a key that
+ *           may be used later in a call to
+ *           usbmsc_attach_notifier_teardown().
+ *   == 0  - Not used.
+ *   < 0   - An unexpected error occurred and no notification will occur. The
+ *           returned value is a negated errno value that indicates the
+ *           nature of the failure.
+ *
+ ****************************************************************************/
+
+int usbhost_msc_notifier_setup(worker_t worker, uint8_t event, char sdchar,
+    FAR void *arg)
+{
+  struct work_notifier_s info;
+
+  DEBUGASSERT(worker != NULL);
+
+  info.evtype    = event;
+  info.qid       = LPWORK;
+  info.qualifier = (FAR void *)(uintptr_t)sdchar;
+  info.arg       = arg;
+  info.worker    = worker;
+
+  return work_notifier_setup(&info);
+}
+
+/****************************************************************************
+ * Name: usbhost_msc_notifier_teardown
+ *
+ * Description:
+ *   Eliminate an USB MSC notification previously setup by
+ *   usbhost_msc_notifier_setup().
+ *   This function should only be called if the notification should be
+ *   aborted prior to the notification.  The notification will automatically
+ *   be torn down after the notification.
+ *
+ * Input Parameters:
+ *   key - The key value returned from a previous call to
+ *         usbhost_msc_notifier_setup().
+ *
+ * Returned Value:
+ *   Zero (OK) is returned on success; a negated errno value is returned on
+ *   any failure.
+ *
+ ****************************************************************************/
+
+int usbhost_msc_notifier_teardown(int key)
+{
+  /* This is just a simple wrapper around work_notifier_teardown(). */
+
+  return work_notifier_teardown(key);
+}
+
+/****************************************************************************
+ * Name: usbhost_msc_notifier_signal
+ *
+ * Description:
+ *   An USB mass storage device has been connected or disconnected.
+ *   Signal all threads.
+ *
+ * Input Parameters:
+ *   event  - Currently only USBHOST_MSC_DISCONNECT and USBHOST_MSC_CONNECT
+ *   sdchar - sdchar of the connected or disconnected block device
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
+void usbhost_msc_notifier_signal(uint8_t event, char sdchar)
+{
+  work_notifier_signal(event, (FAR void *)(uintptr_t)sdchar);
+}
+
+#  endif /* CONFIG_USBHOST_MSC_NOTIFIER */
 
 #endif /* CONFIG_USBHOST && !CONFIG_USBHOST_BULK_DISABLE && !CONFIG_DISABLE_MOUNTPOINT */

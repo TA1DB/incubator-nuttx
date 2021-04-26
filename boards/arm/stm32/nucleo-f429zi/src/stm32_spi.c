@@ -1,5 +1,5 @@
 /****************************************************************************
- * boards/arm/stm32f4/nucleo-f429zi/src/stm32_spi.c
+ * boards/arm/stm32/nucleo-f429zi/src/stm32_spi.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -32,7 +32,7 @@
 #include <nuttx/spi/spi.h>
 #include <arch/board/board.h>
 
-#include "up_arch.h"
+#include "arm_arch.h"
 #include "chip.h"
 #include "stm32_gpio.h"
 #include "stm32_spi.h"

@@ -1,5 +1,5 @@
 /****************************************************************************
- * arch/x86_64/src/common/up_usestack.c
+ * arch/x86_64/src/intel64/up_usestack.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -31,16 +31,9 @@
 
 #include <nuttx/kmalloc.h>
 #include <nuttx/arch.h>
+#include <nuttx/tls.h>
 
 #include "up_internal.h"
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
 
 /****************************************************************************
  * Public Functions
@@ -51,7 +44,7 @@
  *
  * Description:
  *   Setup up stack-related information in the TCB using pre-allocated stack
- *   memory.  This function is called only from task_init() when a task or
+ *   memory.  This function is called only from nxtask_init() when a task or
  *   kernel thread is started (never for pthreads).
  *
  *   The following TCB fields must be initialized:
@@ -60,8 +53,8 @@
  *     processor, etc.  This value is retained only for debug
  *     purposes.
  *   - stack_alloc_ptr: Pointer to allocated stack
- *   - adj_stack_ptr: Adjusted stack_alloc_ptr for HW.  The
- *     initial value of the stack pointer.
+ *   - stack_base_ptr: Adjusted stack base pointer after the TLS Data and
+ *     Arguments has been removed from the stack allocation.
  *
  * Input Parameters:
  *   - tcb: The TCB of new task
@@ -76,8 +69,14 @@
 
 int up_use_stack(struct tcb_s *tcb, void *stack, size_t stack_size)
 {
-  size_t top_of_stack;
+  uintptr_t top_of_stack;
   size_t size_of_stack;
+
+#ifdef CONFIG_TLS_ALIGNED
+  /* Make certain that the user provided stack is properly aligned */
+
+  DEBUGASSERT(((uintptr_t)stack & TLS_STACK_MASK) == 0);
+#endif
 
   /* Is there already a stack allocated? */
 
@@ -92,13 +91,21 @@ int up_use_stack(struct tcb_s *tcb, void *stack, size_t stack_size)
 
   tcb->stack_alloc_ptr = stack;
 
+  /* If stack debug is enabled, then fill the stack with a recognizable value
+   * that we can use later to test for high water marks.
+   */
+
+#ifdef CONFIG_STACK_COLORATION
+  memset(tcb->stack_alloc_ptr, 0xaa, stack_size);
+#endif
+
   /* The intel64 uses a push-down stack:  the stack grows toward lower
    * addresses in memory.  The stack pointer register, points to the lowest,
    * valid work address (the "top" of the stack).  Items on the stack are
    * referenced as positive word offsets from sp.
    */
 
-  top_of_stack = (uint64_t)tcb->stack_alloc_ptr + stack_size - 8;
+  top_of_stack = (uintptr_t)tcb->stack_alloc_ptr + stack_size;
 
   /* The intel64 stack must be aligned at word (16 byte) boundaries. If
    * necessary top_of_stack must be rounded down to the next boundary.
@@ -106,13 +113,12 @@ int up_use_stack(struct tcb_s *tcb, void *stack, size_t stack_size)
    * frame pointer will be pushed, not instruction pointer.
    */
 
-  top_of_stack &= ~0xff;
-  top_of_stack -= 0x8;
-  size_of_stack = top_of_stack - (uint64_t)tcb->stack_alloc_ptr + 8;
+  top_of_stack &= ~0x0f;
+  size_of_stack = top_of_stack - (uintptr_t)tcb->stack_alloc_ptr;
 
   /* Save the adjusted stack values in the struct tcb_s */
 
-  tcb->adj_stack_ptr  = (uint64_t *)top_of_stack;
+  tcb->stack_base_ptr  = tcb->stack_alloc_ptr;
   tcb->adj_stack_size = size_of_stack;
 
   return OK;

@@ -1,5 +1,5 @@
 /****************************************************************************
- * common/up_exit.c
+ * arch/x86_64/src/common/up_exit.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -63,35 +63,35 @@
 #ifdef CONFIG_DUMP_ON_EXIT
 static void _up_dumponexit(FAR struct tcb_s *tcb, FAR void *arg)
 {
-#if CONFIG_NFILE_DESCRIPTORS > 0
   FAR struct filelist *filelist;
-#if CONFIG_NFILE_STREAMS > 0
-  FAR struct streamlist *streamlist;
+#ifdef CONFIG_FILE_STREAM
+  FAR struct file_struct *filep;
 #endif
   int i;
-#endif
+  int j;
 
   sinfo("  TCB=%p name=%s pid=%d\n", tcb, tcb->argv[0], tcb->pid);
   sinfo("    priority=%d state=%d\n", tcb->sched_priority, tcb->task_state);
 
-#if CONFIG_NFILE_DESCRIPTORS > 0
   filelist = tcb->group->tg_filelist;
-  for (i = 0; i < CONFIG_NFILE_DESCRIPTORS; i++)
+  for (i = 0; i < filelist->fl_rows; i++)
     {
-      struct inode *inode = filelist->fl_files[i].f_inode;
-      if (inode)
+      for (j = 0; j < CONFIG_NFILE_DESCRIPTORS_PER_BLOCK; j++)
         {
-          sinfo("      fd=%d refcount=%d\n",
-                i, inode->i_crefs);
+          struct inode *inode = filelist->fl_files[i][j].f_inode;
+          if (inode)
+            {
+              sinfo("      fd=%d refcount=%d\n",
+                    i * CONFIG_NFILE_DESCRIPTORS_PER_BLOCK + j,
+                    inode->i_crefs);
+            }
         }
     }
-#endif
 
-#if CONFIG_NFILE_STREAMS > 0
-  streamlist = tcb->group->tg_streamlist;
-  for (i = 0; i < CONFIG_NFILE_STREAMS; i++)
+#ifdef CONFIG_FILE_STREAM
+  filep = tcb->group->tg_streamlist->sl_head;
+  for (; filep != NULL; filep = filep->fs_next)
     {
-      struct file_struct *filep = &streamlist->sl_streams[i];
       if (filep->fs_fd >= 0)
         {
 #ifndef CONFIG_STDIO_DISABLE_BUFFERING
@@ -117,7 +117,7 @@ static void _up_dumponexit(FAR struct tcb_s *tcb, FAR void *arg)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: _exit
+ * Name: up_exit
  *
  * Description:
  *   This function causes the currently executing task to cease to exist.
@@ -127,7 +127,7 @@ static void _up_dumponexit(FAR struct tcb_s *tcb, FAR void *arg)
  *
  ****************************************************************************/
 
-void _exit(int status)
+void up_exit(int status)
 {
   struct tcb_s *tcb;
 
@@ -135,24 +135,30 @@ void _exit(int status)
    * The IRQ state will be restored when the next task is started.
    */
 
-  (void)enter_critical_section();
+  enter_critical_section();
 
   sinfo("TCB=%p exiting\n", this_task());
 
 #ifdef CONFIG_DUMP_ON_EXIT
   sinfo("Other tasks:\n");
-  sched_foreach(_up_dumponexit, NULL);
+  nxsched_foreach(_up_dumponexit, NULL);
 #endif
 
   /* Destroy the task at the head of the ready to run list. */
 
-  (void)nxtask_exit();
+  nxtask_exit();
 
   /* Now, perform the context switch to the new ready-to-run task at the
    * head of the list.
    */
 
   tcb = this_task();
+
+  /* Adjusts time slice for SCHED_RR & SCHED_SPORADIC cases
+   * NOTE: the API also adjusts the global IRQ control for SMP
+   */
+
+  nxsched_resume_scheduler(tcb);
 
   /* Context switch, rearrange MMU */
 
@@ -165,11 +171,10 @@ void _exit(int status)
    * the ready-to-run list.
    */
 
-  (void)group_addrenv(tcb);
+  group_addrenv(tcb);
 #endif
 
   /* Then switch contexts */
 
   up_fullcontextrestore(tcb->xcp.regs);
 }
-

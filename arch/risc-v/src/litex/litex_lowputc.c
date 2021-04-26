@@ -28,8 +28,8 @@
 
 #include <arch/board/board.h>
 
-#include "up_internal.h"
-#include "up_arch.h"
+#include "riscv_internal.h"
+#include "riscv_arch.h"
 
 #include "litex_config.h"
 #include "hardware/litex_memorymap.h"
@@ -70,14 +70,14 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: up_lowputc
+ * Name: riscv_lowputc
  *
  * Description:
  *   Output one byte on the serial console
  *
  ****************************************************************************/
 
-void up_lowputc(char ch)
+void riscv_lowputc(char ch)
 {
 #ifdef HAVE_SERIAL_CONSOLE
   /* Wait until the TX data register is empty */
@@ -111,7 +111,7 @@ void litex_lowsetup(void)
 
 #if defined(HAVE_SERIAL_CONSOLE) && !defined(CONFIG_SUPPRESS_UART_CONFIG)
 
-  /* defualt baudrate set by fpga fabric is 1e6 */
+  /* default baudrate set by fpga fabric is 1e6 */
 
   /* Enable TX */
 

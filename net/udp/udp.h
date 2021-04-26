@@ -1,35 +1,20 @@
 /****************************************************************************
  * net/udp/udp.h
  *
- *   Copyright (C) 2014-2015, 2018 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -107,9 +92,6 @@ struct udp_poll_s
   FAR struct net_driver_s *dev;    /* Needed to free the callback structure */
   struct pollfd *fds;              /* Needed to handle poll events */
   FAR struct devif_callback_s *cb; /* Needed to teardown the poll */
-#if defined(CONFIG_NET_UDP_WRITE_BUFFERS) && defined(CONFIG_IOB_NOTIFIER)
-  int16_t key;                     /* Needed to cancel pending notification */
-#endif
 };
 
 struct udp_conn_s
@@ -298,7 +280,8 @@ int udp_bind(FAR struct udp_conn_s *conn, FAR const struct sockaddr *addr);
  *
  ****************************************************************************/
 
-int udp_connect(FAR struct udp_conn_s *conn, FAR const struct sockaddr *addr);
+int udp_connect(FAR struct udp_conn_s *conn,
+                FAR const struct sockaddr *addr);
 
 /****************************************************************************
  * Name: udp_close
@@ -688,9 +671,9 @@ ssize_t psock_udp_recvfrom(FAR struct socket *psock, FAR void *buf,
  *
  ****************************************************************************/
 
-ssize_t psock_udp_sendto(FAR struct socket *psock, FAR const void *buf,
-                         size_t len, int flags, FAR const struct sockaddr *to,
-                         socklen_t tolen);
+ssize_t psock_udp_sendto(FAR struct socket *psock,
+                         FAR const void *buf, size_t len, int flags,
+                         FAR const struct sockaddr *to, socklen_t tolen);
 
 /****************************************************************************
  * Name: udp_pollsetup
@@ -797,8 +780,8 @@ int udp_writebuffer_notifier_setup(worker_t worker,
  *
  * Description:
  *   Eliminate a UDP read-ahead notification previously setup by
- *   udp_readahead_notifier_setup().  This function should only be called if the
- *   notification should be aborted prior to the notification.  The
+ *   udp_readahead_notifier_setup().  This function should only be called if
+ *   the notification should be aborted prior to the notification.  The
  *   notification will automatically be torn down after the notification.
  *
  * Input Parameters:
@@ -825,7 +808,7 @@ int udp_notifier_teardown(int key);
  *   When read-ahead data becomes available, *all* of the workers waiting
  *   for read-ahead data will be executed.  If there are multiple workers
  *   waiting for read-ahead data then only the first to execute will get the
- *   data.  Others will need to call udp_readahead_notifier_setup() once again.
+ *   data. Others will need to call udp_readahead_notifier_setup once again.
  *
  * Input Parameters:
  *   conn  - The UDP connection where read-ahead data was just buffered.

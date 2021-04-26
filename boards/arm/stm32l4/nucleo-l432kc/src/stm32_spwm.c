@@ -1,35 +1,20 @@
 /****************************************************************************
- * boards/arm/stm32/nucleo-l432kc/src/stm32_spwm.c
+ * boards/arm/stm32l4/nucleo-l432kc/src/stm32_spwm.c
  *
- *   Copyright (C) 2018, 2019 Gregory Nutt. All rights reserved.
- *   Author: Mateusz Szafoni <raiden00@railab.me>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -52,7 +37,7 @@
 #include <arch/chip/chip.h>
 #include <arch/board/board.h>
 
-#include "up_internal.h"
+#include "arm_internal.h"
 #include "ram_vectors.h"
 
 #include "stm32l4_pwm.h"
@@ -154,16 +139,16 @@ struct spwm_s
 #ifdef CONFIG_NUCLEOL432KC_SPWM_USE_TIM1
   FAR struct stm32l4_tim_dev_s *tim;
 #endif
-  float waveform[SAMPLES_NUM];        /* Waveform samples */
-  float phase_step;                   /* Waveform phase step */
-  float waveform_freq;                /* Waveform frequency */
-  uint16_t cmp[SAMPLES_NUM];          /* PWM TIM compare table */
-  uint16_t per;                       /* PWM TIM period */
-  uint16_t samples;                   /* Modulation waveform samples num */
-  uint16_t phase_shift[PHASES_NUM];   /* Phase offset */
+  float waveform[SAMPLES_NUM];               /* Waveform samples */
+  float phase_step;                          /* Waveform phase step */
+  float waveform_freq;                       /* Waveform frequency */
+  uint16_t cmp[SAMPLES_NUM];                 /* PWM TIM compare table */
+  uint16_t per;                              /* PWM TIM period */
+  uint16_t samples;                          /* Modulation waveform samples num */
+  uint16_t phase_shift[PHASES_NUM];          /* Phase offset */
   volatile uint16_t sample_now[PHASES_NUM];  /* Current sample number for
                                               * phase */
-  uint8_t phases;                     /* Number of PWM phases */
+  uint8_t phases;                            /* Number of PWM phases */
 };
 
 /****************************************************************************
@@ -359,7 +344,6 @@ static int spwm_tim6_setup(FAR struct spwm_s *spwm)
 {
   FAR struct stm32l4_tim_dev_s *tim = NULL;
   uint64_t freq = 0;
-  uint32_t per = 0;
   int ret = OK;
 
   /* Get TIM6 interface */
@@ -380,25 +364,16 @@ static int spwm_tim6_setup(FAR struct spwm_s *spwm)
    */
 
   freq = spwm->samples * spwm->waveform_freq;
-  per = BOARD_TIM6_FREQUENCY / freq;
-  if (per > 0xffff)
-    {
-      printf("ERROR: can not achieve TIM6 frequency\n");
-      ret = -1;
-      goto errout;
-    }
 
-  /* TODO: TIM_SETFREQ */
-
-  STM32L4_TIM_SETCLOCK(tim, BOARD_TIM6_FREQUENCY);
-  STM32L4_TIM_SETPERIOD(tim, per);
+  STM32L4_TIM_SETFREQ(tim, freq);
+  STM32L4_TIM_ENABLE(tim);
 
   /* Attach TIM6 ram vector */
 
-  ret = up_ramvec_attach(STM32L4_IRQ_TIM6, tim6_handler);
+  ret = arm_ramvec_attach(STM32L4_IRQ_TIM6, tim6_handler);
   if (ret < 0)
     {
-      printf("ERROR: up_ramvec_attach failed: %d\n", ret);
+      printf("ERROR: arm_ramvec_attach failed: %d\n", ret);
       ret = -1;
       goto errout;
     }

@@ -1,37 +1,20 @@
 /****************************************************************************
  * arch/arm/src/stm32l4/stm32l4x6xx_rcc.c
  *
- *   Copyright (C) 2011-2012, 2014-2015 Gregory Nutt. All rights reserved.
- *   Copyright (C) 2016 Sebastien Lorquet. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
- *           Sebastien Lorquet <sebastien@lorquet.fr>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -682,6 +665,32 @@ static void stm32l4_stdclockconfig(void)
   uint32_t regval;
   volatile int32_t timeout;
 
+  /* Enable FLASH prefetch, instruction cache, data cache,
+   * and 4 wait states. We do this early since the default is zero
+   * wait states and if we are about to increase clock frequency
+   * bad things will happen.
+   *
+   * TODO: could reduce flash wait states according to vcore range
+   * and freq
+   */
+
+#ifdef CONFIG_STM32L4_FLASH_PREFETCH
+  regval = (FLASH_ACR_LATENCY_4 | FLASH_ACR_ICEN | FLASH_ACR_DCEN |
+            FLASH_ACR_PRFTEN);
+#else
+  regval = (FLASH_ACR_LATENCY_4 | FLASH_ACR_ICEN | FLASH_ACR_DCEN);
+#endif
+  putreg32(regval, STM32L4_FLASH_ACR);
+
+  /* Wait until the requested number of wait states is set */
+
+  while ((getreg32(STM32L4_FLASH_ACR) & FLASH_ACR_LATENCY_MASK) !=
+         FLASH_ACR_LATENCY_4)
+    {
+    }
+
+  /* Proceed to clock configuration */
+
 #if defined(STM32L4_BOARD_USEHSI) || defined(STM32L4_I2C_USE_HSI16)
   /* Enable Internal High-Speed Clock (HSI) */
 
@@ -723,23 +732,33 @@ static void stm32l4_stdclockconfig(void)
         }
     }
 
-  /* setting MSIRANGE */
+  /* Choose MSI frequency */
 
   regval  = getreg32(STM32L4_RCC_CR);
-  regval |= (STM32L4_BOARD_MSIRANGE | RCC_CR_MSION);    /* Enable MSI and frequency */
+  regval &= ~RCC_CR_MSIRANGE_MASK;
+  regval |= (STM32L4_BOARD_MSIRANGE | RCC_CR_MSIRGSEL);
   putreg32(regval, STM32L4_RCC_CR);
 
-  /* Wait until the MSI is ready (or until a timeout elapsed) */
-
-  for (timeout = MSIRDY_TIMEOUT; timeout > 0; timeout--)
+  if (!(regval & RCC_CR_MSION))
     {
-      /* Check if the MSIRDY flag is the set in the CR */
+      /* Enable MSI */
 
-      if ((getreg32(STM32L4_RCC_CR) & RCC_CR_MSIRDY) != 0)
+      regval  = getreg32(STM32L4_RCC_CR);
+      regval |= RCC_CR_MSION;
+      putreg32(regval, STM32L4_RCC_CR);
+
+      /* Wait until the MSI is ready (or until a timeout elapsed) */
+
+      for (timeout = MSIRDY_TIMEOUT; timeout > 0; timeout--)
         {
-          /* If so, then break-out with timeout > 0 */
+          /* Check if the MSIRDY flag is the set in the CR */
 
-          break;
+          if ((getreg32(STM32L4_RCC_CR) & RCC_CR_MSIRDY) != 0)
+            {
+              /* If so, then break-out with timeout > 0 */
+
+              break;
+            }
         }
     }
 
@@ -776,23 +795,27 @@ static void stm32l4_stdclockconfig(void)
 
   if (timeout > 0)
     {
-#warning todo: regulator voltage according to clock freq
+      if (STM32L4_SYSCLK_FREQUENCY > 24000000ul)
+        {
+          /* Select regulator voltage output Scale 1 mode to support system
+           * frequencies up to 168 MHz.
+           */
+
+          /* TODO: this seems to hang on STM32L476, at least for MSI@48MHz */
 #if 0
-      /* Ensure Power control is enabled before modifying it. */
-
-      regval  = getreg32(STM32L4_RCC_APB1ENR);
-      regval |= RCC_APB1ENR_PWREN;
-      putreg32(regval, STM32L4_RCC_APB1ENR);
-
-      /* Select regulator voltage output Scale 1 mode to support system
-       * frequencies up to 168 MHz.
-       */
-
-      regval  = getreg32(STM32L4_PWR_CR);
-      regval &= ~PWR_CR_VOS_MASK;
-      regval |= PWR_CR_VOS_SCALE_1;
-      putreg32(regval, STM32L4_PWR_CR);
+          stm32l4_pwr_enableclk(true);
+          stm32_pwr_setvos(1);
 #endif
+        }
+      else
+        {
+          /* Select regulator voltage output Scale 2 mode for
+           * frequencies below 24 MHz
+           */
+
+          stm32l4_pwr_enableclk(true);
+          stm32_pwr_setvos(2);
+        }
 
       /* Set the HCLK source/divider */
 
@@ -824,6 +847,7 @@ static void stm32l4_stdclockconfig(void)
       putreg32(regval, STM32L4_RCC_CFGR);
 #endif
 
+#ifndef STM32L4_BOARD_NOPLL
       /* Set the PLL source and main divider */
 
       regval  = getreg32(STM32L4_RCC_PLLCFG);
@@ -860,6 +884,8 @@ static void stm32l4_stdclockconfig(void)
       regval |= RCC_PLLCFG_PLLSRC_HSE;
 #endif
 
+      /* Use the main PLL as SYSCLK, so enable it first */
+
       putreg32(regval, STM32L4_RCC_PLLCFG);
 
       /* Enable the main PLL */
@@ -873,6 +899,7 @@ static void stm32l4_stdclockconfig(void)
       while ((getreg32(STM32L4_RCC_CR) & RCC_CR_PLLRDY) == 0)
         {
         }
+#endif
 
 #ifdef CONFIG_STM32L4_SAI1PLL
       /* Configure SAI1 PLL */
@@ -941,27 +968,34 @@ static void stm32l4_stdclockconfig(void)
         }
 #endif
 
-      /* Enable FLASH prefetch, instruction cache, data cache, and 4 wait states */
-
-#ifdef CONFIG_STM32L4_FLASH_PREFETCH
-      regval = (FLASH_ACR_LATENCY_4 | FLASH_ACR_ICEN | FLASH_ACR_DCEN |
-                FLASH_ACR_PRFTEN);
-#else
-      regval = (FLASH_ACR_LATENCY_4 | FLASH_ACR_ICEN | FLASH_ACR_DCEN);
-#endif
-      putreg32(regval, STM32L4_FLASH_ACR);
-
-      /* Select the main PLL as system clock source */
+      /* Select the system clock source */
 
       regval  = getreg32(STM32L4_RCC_CFGR);
       regval &= ~RCC_CFGR_SW_MASK;
+#ifndef STM32L4_BOARD_NOPLL
       regval |= RCC_CFGR_SW_PLL;
+#elif STM32L4_BOARD_USEMSI
+      regval |= RCC_CFGR_SW_MSI;
+#elif STM32L4_BOARD_USEHSI
+      regval |= RCC_CFGR_SW_HSI;
+#elif STM32L4_BOARD_USEHSE
+      regval |= RCC_CFGR_SW_HSE;
+#endif
       putreg32(regval, STM32L4_RCC_CFGR);
 
       /* Wait until the PLL source is used as the system clock source */
 
       while ((getreg32(STM32L4_RCC_CFGR) & RCC_CFGR_SWS_MASK) !=
-              RCC_CFGR_SWS_PLL)
+#ifndef STM32L4_BOARD_NOPLL
+              RCC_CFGR_SWS_PLL
+#elif STM32L4_BOARD_USEMSI
+              RCC_CFGR_SWS_MSI
+#elif STM32L4_BOARD_USEHSI
+              RCC_CFGR_SWS_HSI
+#elif STM32L4_BOARD_USEHSE
+              RCC_CFGR_SWS_HSE
+#endif
+             )
         {
         }
 

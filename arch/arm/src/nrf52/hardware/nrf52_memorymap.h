@@ -1,35 +1,20 @@
 /****************************************************************************
  * arch/arm/src/nrf52/hardware/nrf52_memorymap.h
  *
- *   Copyright (C) 2018 Gregory Nutt. All rights reserved.
- *   Author:  Janne Rosberg <janne@offcode.fi>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -61,7 +46,7 @@
 
 #define NRF52_CLOCK_BASE          0x40000000
 #define NRF52_POWER_BASE          0x40000000
-#ifdef CONFIG_ARCH_CHIP_NRF52832
+#ifdef CONFIG_NRF52_HAVE_BPROT
 #  define NRF52_BPROT_BASE        0x40000000
 #endif
 #define NRF52_RADIO_BASE          0x40001000
@@ -112,7 +97,7 @@
 #define NRF52_TIMER4_BASE         0x4001b000
 #define NRF52_PWM0_BASE           0x4001c000
 #define NRF52_PDM_BASE            0x4001d000
-#ifdef CONFIG_ARCH_CHIP_NRF52840
+#ifdef CONFIG_NRF52_HAVE_ACL
 #  define NRF52_ACL_BASE          0x4001e000
 #endif
 #define NRF52_NVMC_BASE           0x4001e000
@@ -126,23 +111,30 @@
 #define NRF52_RTC2_BASE           0x40024000
 #define NRF52_I2S_BASE            0x40025000
 #define NRF52_FPU_BASE            0x40026000
-#ifdef CONFIG_ARCH_CHIP_NRF52840
+#ifdef CONFIG_NRF52_HAVE_USBDEV
 #  define NRF52_USBD_BASE         0x40027000
+#endif
+#ifdef CONFIG_NRF52_HAVE_UART1
 #  define NRF52_UART1_BASE        0x40028000
 #  define NRF52_UARTE1_BASE       0x40028000
+#endif
+#ifdef CONFIG_NRF52_HAVE_QSPI
 #  define NRF52_QSPI_BASE         0x40029000
+#endif
+#ifdef CONFIG_NRF52_HAVE_PWM3
 #  define NRF52_PWM3_BASE         0x4002d000
+#endif
+#ifdef CONFIG_NRF52_HAVE_SPI3_MASTER
 #  define NRF52_SPIM3_BASE        0x4002f000
 #endif
 
 /* AHB Peripherals */
 
 #define NRF52_GPIO_P0_BASE        0x50000000
-#ifdef CONFIG_ARCH_CHIP_NRF52840
+#ifdef CONFIG_NRF52_HAVE_PORT1
 #  define NRF52_GPIO_P1_BASE      0x50000300
 #endif
-
-#ifdef CONFIG_ARCH_CHIP_NRF52840
+#ifdef CONFIG_NRF52_HAVE_CRYPTOCELL
 #  define NRF52_CCHOSTRGF_BASE    0x5002a000
 #  define NRF52_CRYPTOCELL_BASE   0x5002a000
 #endif

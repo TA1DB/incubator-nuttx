@@ -1,35 +1,20 @@
 /****************************************************************************
  * sched/init/nx_start.c
  *
- *   Copyright (C) 2007-2014, 2016, 2018 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -66,9 +51,6 @@
 #include "semaphore/semaphore.h"
 #ifndef CONFIG_DISABLE_MQUEUE
 #  include "mqueue/mqueue.h"
-#endif
-#ifndef CONFIG_DISABLE_PTHREAD
-#  include "pthread/pthread.h"
 #endif
 #include "clock/clock.h"
 #include "timer/timer.h"
@@ -194,7 +176,7 @@ volatile dq_queue_t g_waitingforfill;
 
 #ifdef CONFIG_SIG_SIGSTOP_ACTION
 /* This is the list of all tasks that have been stopped
- * via SIGSTOP or SIGSTP
+ * via SIGSTOP or SIGTSTP
  */
 
 volatile dq_queue_t g_stoppedtasks;
@@ -450,12 +432,12 @@ void nx_start(void)
       if (cpu > 0)
         {
           g_idletcb[cpu].cmn.start      = nx_idle_trampoline;
-          g_idletcb[cpu].cmn.entry.main = nx_idle_task;
+          g_idletcb[cpu].cmn.entry.main = (main_t)nx_idle_trampoline;
         }
       else
 #endif
         {
-          g_idletcb[cpu].cmn.start      = (start_t)nx_start;
+          g_idletcb[cpu].cmn.start      = nx_start;
           g_idletcb[cpu].cmn.entry.main = (main_t)nx_start;
         }
 
@@ -528,9 +510,14 @@ void nx_start(void)
 
       g_running_tasks[cpu] = &g_idletcb[cpu].cmn;
 
-      /* Initialize the processor-specific portion of the TCB */
+      /* Initialize the 1st processor-specific portion of the TCB
+       * Note: other idle thread get initialized in nx_smpstart
+       */
 
-      up_initial_state(&g_idletcb[cpu].cmn);
+      if (cpu == 0)
+        {
+          up_initial_state(&g_idletcb[cpu].cmn);
+        }
     }
 
   /* Task lists are initialized */
@@ -571,10 +558,6 @@ void nx_start(void)
       kmm_initialize(heap_start, heap_size);
 #endif
 
-#ifdef CONFIG_ARCH_USE_MODULE_TEXT
-    up_module_text_init();
-#endif
-
 #ifdef CONFIG_MM_PGALLOC
       /* If there is a page allocator in the configuration, then get the page
        * heap information from the platform-specific code and configure the
@@ -585,6 +568,10 @@ void nx_start(void)
       mm_pginitialize(heap_start, heap_size);
 #endif
     }
+#endif
+
+#ifdef CONFIG_ARCH_USE_MODULE_TEXT
+  up_module_text_init();
 #endif
 
 #ifdef CONFIG_MM_IOB
@@ -607,6 +594,10 @@ void nx_start(void)
       task_initialize();
     }
 #endif
+
+  /* Initialize the file system (needed to support device drivers) */
+
+  fs_initialize();
 
   /* Initialize the interrupt handling subsystem (if included) */
 
@@ -663,21 +654,6 @@ void nx_start(void)
       nxmq_initialize();
     }
 #endif
-
-#ifndef CONFIG_DISABLE_PTHREAD
-  /* Initialize the thread-specific data facility (if in link) */
-
-#ifdef CONFIG_HAVE_WEAKFUNCTIONS
-  if (pthread_initialize != NULL)
-#endif
-    {
-      pthread_initialize();
-    }
-#endif
-
-  /* Initialize the file system (needed to support device drivers) */
-
-  fs_initialize();
 
 #ifdef CONFIG_NET
   /* Initialize the networking system */
@@ -786,12 +762,6 @@ void nx_start(void)
 
   DEBUGASSERT(this_cpu() == 0 && CONFIG_MAX_TASKS > CONFIG_SMP_NCPUS);
 
-  /* Take the memory manager semaphore on this CPU so that it will not be
-   * available on the other CPUs until we have finished initialization.
-   */
-
-  DEBUGVERIFY(kmm_trysemaphore());
-
   /* Then start the other CPUs */
 
   DEBUGVERIFY(nx_smp_start());
@@ -808,13 +778,6 @@ void nx_start(void)
 
   DEBUGVERIFY(nx_bringup());
 
-#ifdef CONFIG_SMP
-  /* Let other threads have access to the memory manager */
-
-  kmm_givesemaphore();
-
-#endif /* CONFIG_SMP */
-
   /* The IDLE Loop **********************************************************/
 
   /* When control is return to this point, the system is idle. */
@@ -822,6 +785,17 @@ void nx_start(void)
   sinfo("CPU0: Beginning Idle Loop\n");
   for (; ; )
     {
+      /* Check heap & stack in idle thread */
+
+      kmm_checkcorruption();
+
+#if defined(CONFIG_STACK_COLORATION) && defined(CONFIG_DEBUG_MM)
+      for (i = 0; i < CONFIG_MAX_TASKS && g_pidhash[i].tcb; i++)
+        {
+          assert(up_check_tcbstack_remain(g_pidhash[i].tcb) > 0);
+        }
+#endif
+
       /* Perform any processor-specific idle state operations */
 
       up_idle();

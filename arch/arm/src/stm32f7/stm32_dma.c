@@ -1,36 +1,20 @@
 /****************************************************************************
  * arch/arm/src/stm32f7/stm32_dma.c
  *
- *   Copyright (C) 2015-2017 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
- *            Bob Feretich <bob.feretich@rafresearch.com>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -40,6 +24,7 @@
 
 #include <nuttx/config.h>
 
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <debug.h>
@@ -50,9 +35,9 @@
 #include <nuttx/semaphore.h>
 #include <arch/stm32f7/chip.h>
 
-#include "up_arch.h"
+#include "arm_arch.h"
 
-#include "up_internal.h"
+#include "arm_internal.h"
 #include "sched/sched.h"
 #include "stm32_dma.h"
 
@@ -464,7 +449,7 @@ static int stm32_dmainterrupt(int irq, void *context, FAR void *arg)
  *
  ****************************************************************************/
 
-void weak_function up_dma_initialize(void)
+void weak_function arm_dma_initialize(void)
 {
   struct stm32_dma_s *dmast;
   int stream;
@@ -601,7 +586,8 @@ void stm32_dmasetup(DMA_HANDLE handle, uint32_t paddr, uint32_t maddr,
   uint32_t regoffset;
   uint32_t regval;
 
-  dmainfo("paddr: %08x maddr: %08x ntransfers: %d scr: %08x\n",
+  dmainfo("paddr: %08" PRIx32 " maddr: %08" PRIx32
+          " ntransfers: %zu scr: %08" PRIx32 "\n",
           paddr, maddr, ntransfers, scr);
 
 #ifdef CONFIG_STM32F7_DMACAPABLE
@@ -875,13 +861,14 @@ size_t stm32_dmaresidual(DMA_HANDLE handle)
  ****************************************************************************/
 
 #ifdef CONFIG_STM32F7_DMACAPABLE
-bool stm32_dmacapable(uint32_t maddr, uint32_t count, uint32_t ccr)
+bool stm32_dmacapable(uintptr_t maddr, uint32_t count, uint32_t ccr)
 {
   uint32_t transfer_size;
   uint32_t burst_length;
   uint32_t mend;
 
-  dmainfo("stm32_dmacapable: 0x%08x/%u 0x%08x\n", maddr, count, ccr);
+  dmainfo("stm32_dmacapable: 0x%08" PRIxPTR
+          "/%" PRIu32 " 0x%08" PRIx32 "\n", maddr, count, ccr);
 
   /* Verify that the address conforms to the memory transfer size.
    * Transfers to/from memory performed by the DMA controller are
@@ -933,10 +920,12 @@ bool stm32_dmacapable(uint32_t maddr, uint32_t count, uint32_t ccr)
   if ((maddr & (ARMV7M_DCACHE_LINESIZE - 1)) != 0 ||
       ((mend + 1) & (ARMV7M_DCACHE_LINESIZE - 1)) != 0)
     {
-      dmainfo("stm32_dmacapable:"
+      dmawarn("stm32_dmacapable:"
               " dcache unaligned maddr:0x%08x mend:0x%08x\n",
               maddr, mend);
+#if !defined(CONFIG_STM32F7_DMACAPABLE_ASSUME_CACHE_ALIGNED)
       return false;
+#endif
     }
 #  endif
 
@@ -1040,7 +1029,7 @@ bool stm32_dmacapable(uint32_t maddr, uint32_t count, uint32_t ccr)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG_DMA
+#ifdef CONFIG_DEBUG_DMA_INFO
 void stm32_dmasample(DMA_HANDLE handle, struct stm32_dmaregs_s *regs)
 {
   struct stm32_dma_s *dmast = (struct stm32_dma_s *)handle;

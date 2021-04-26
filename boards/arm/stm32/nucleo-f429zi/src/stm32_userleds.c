@@ -1,5 +1,5 @@
 /****************************************************************************
- * boards/arm/stm32f4/nucleo-f429zi/src/stm32_userleds.c
+ * boards/arm/stm32/nucleo-f429zi/src/stm32_userleds.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -71,7 +71,7 @@ static const uint32_t g_ledcfg[BOARD_NLEDS] =
  *
  ****************************************************************************/
 
-void board_userled_initialize(void)
+uint32_t board_userled_initialize(void)
 {
   int i;
 
@@ -81,6 +81,8 @@ void board_userled_initialize(void)
     {
       stm32_configgpio(g_ledcfg[i]);
     }
+
+  return BOARD_NLEDS;
 }
 
 /****************************************************************************
@@ -113,7 +115,7 @@ void board_userled(int led, bool ledon)
  *
  ****************************************************************************/
 
-void board_userled_all(uint8_t ledset)
+void board_userled_all(uint32_t ledset)
 {
   int i;
 

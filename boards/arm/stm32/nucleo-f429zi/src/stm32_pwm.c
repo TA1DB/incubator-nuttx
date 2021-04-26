@@ -1,5 +1,5 @@
 /****************************************************************************
- * boards/arm/stm32f4/nucleo-f429zi/src/stm32_pwm.c
+ * boards/arm/stm32/nucleo-f429zi/src/stm32_pwm.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -33,7 +33,7 @@
 #include <arch/board/board.h>
 
 #include "chip.h"
-#include "up_arch.h"
+#include "arm_arch.h"
 #include "stm32_pwm.h"
 #include "nucleo-144.h"
 

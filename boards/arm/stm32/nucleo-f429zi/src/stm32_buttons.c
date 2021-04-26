@@ -1,5 +1,5 @@
 /****************************************************************************
- * boards/arm/stm32f4/nucleo-f429zi/src/stm32_buttons.c
+ * boards/arm/stm32/nucleo-f429zi/src/stm32_buttons.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -52,9 +52,10 @@
  *
  ****************************************************************************/
 
-void board_button_initialize(void)
+uint32_t board_button_initialize(void)
 {
   stm32_configgpio(GPIO_BTN_USER);
+  return NUM_BUTTONS;
 }
 
 /****************************************************************************

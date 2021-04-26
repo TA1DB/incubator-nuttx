@@ -99,86 +99,14 @@ GNU Toolchain Options
   The NuttX make system has been modified to support the following different
   toolchain options.
 
-    1. The CodeSourcery GNU toolchain,
-    2. The Atollic Toolchain,
-    3. The devkitARM GNU toolchain,
-    4. Raisonance GNU toolchain, or
-    5. The NuttX buildroot Toolchain (see below).
+  1. The NuttX buildroot Toolchain (see below), or
+  2. Any generic arm-none-eabi GNU toolchain.
 
-  All testing has been conducted using the CodeSourcery toolchain for Linux.
-  To use the Atollic, devkitARM, Raisonance GNU, or NuttX buildroot toolchain,
-  you simply need to add one of the following configuration options to your
-  .config (or defconfig) file:
+  All testing has been conducted using the NuttX Codesourcery toolchain.  To use
+  a different toolchain, you simply need to modify the configuration.  As an
+  example:
 
-    CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYW=n  : CodeSourcery under Windows
-    CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYL=y  : CodeSourcery under Linux
-    CONFIG_ARMV7M_TOOLCHAIN_ATOLLIC=y        : The Atollic toolchain under Windows
-    CONFIG_ARMV7M_TOOLCHAIN_DEVKITARM=n      : devkitARM under Windows
-    CONFIG_ARMV7M_TOOLCHAIN_RAISONANCE=y     : Raisonance RIDE7 under Windows
-    CONFIG_ARMV7M_TOOLCHAIN_BUILDROOT=n      : NuttX buildroot under Linux or Cygwin (default)
-
-  If you change the default toolchain, then you may also have to modify the
-  PATH environment variable to include the path to the toolchain binaries.
-
-  NOTE: There are several limitations to using a Windows based toolchain in a
-  Cygwin environment.  The three biggest are:
-
-  1. The Windows toolchain cannot follow Cygwin paths.  Path conversions are
-     performed automatically in the Cygwin makefiles using the 'cygpath' utility
-     but you might easily find some new path problems.  If so, check out 'cygpath -w'
-
-  2. Windows toolchains cannot follow Cygwin symbolic links.  Many symbolic links
-     are used in Nuttx (e.g., include/arch).  The make system works around these
-     problems for the Windows tools by copying directories instead of linking them.
-     But this can also cause some confusion for you:  For example, you may edit
-     a file in a "linked" directory and find that your changes had no effect.
-     That is because you are building the copy of the file in the "fake" symbolic
-     directory.  If you use a Windows toolchain, you should get in the habit of
-     making like this:
-
-       V=1 make clean_context all 2>&1 |tee mout
-
-     An alias in your .bashrc file might make that less painful.
-
-  The Atollic "Pro" and "Lite" Toolchain
-  --------------------------------------
-  One problem that I had with the Atollic toolchains is that the provide a gcc.exe
-  and g++.exe in the same bin/ file as their ARM binaries.  If the Atollic bin/ path
-  appears in your PATH variable before /usr/bin, then you will get the wrong gcc
-  when you try to build host executables.  This will cause to strange, uninterpretable
-  errors build some host binaries in tools/ when you first make.
-
-  Also, the Atollic toolchains are the only toolchains that have built-in support for
-  the FPU in these configurations.  If you plan to use the Cortex-M4 FPU, you will
-  need to use the Atollic toolchain for now.  See the FPU section below for more
-  information.
-
-  The Atollic "Lite" Toolchain
-  ----------------------------
-  The free, "Lite" version of the Atollic toolchain does not support C++ nor
-  does it support ar, nm, objdump, or objdcopy. If you use the Atollic "Lite"
-  toolchain, you will have to set:
-
-    CONFIG_HAVE_CXX=n
-
-  In order to compile successfully.  Otherwise, you will get errors like:
-
-    "C++ Compiler only available in TrueSTUDIO Professional"
-
-  The make may then fail in some of the post link processing because of some of
-  the other missing tools.  The Make.defs file replaces the ar and nm with
-  the default system x86 tool versions and these seem to work okay.  Disable all
-  of the following to avoid using objcopy:
-
-    CONFIG_INTELHEX_BINARY=n
-    CONFIG_MOTOROLA_SREC=n
-    CONFIG_RAW_BINARY=n
-
-  devkitARM
-  ---------
-  The devkitARM toolchain includes a version of MSYS make.  Make sure that the
-  the paths to Cygwin's /bin and /usr/bin directories appear BEFORE the devkitARM
-  path or will get the wrong version of make.
+    CONFIG_ARM_TOOLCHAIN_GNU_EABIL : Generic arm-none-eabi toolchain
 
 IDEs
 ====
@@ -234,7 +162,7 @@ NuttX EABI "buildroot" Toolchain
   Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
-  1. You must have already configured Nuttx in <some-dir>/nuttx.
+  1. You must have already configured NuttX in <some-dir>/nuttx.
 
      $ tools/configure.sh nucleo-f446re:nsh
      $ make qconfig
@@ -277,7 +205,7 @@ NXFLAT Toolchain
 
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
-  1. You must have already configured Nuttx in <some-dir>/nuttx.
+  1. You must have already configured NuttX in <some-dir>/nuttx.
 
      tools/configure.sh lpcxpresso-lpc1768:<sub-dir>
 
@@ -560,7 +488,7 @@ Shields
       CONFIG_ANALOG=y                  : Should be automatically selected
       CONFIG_ADC=y                     : Should be automatically selected
       CONFIG_INPUT=y                   : Select input device support
-      CONFIG_AJOYSTICK=y               : Select analog joystick support
+      CONFIG_INPUT_AJOYSTICK=y         : Select analog joystick support
 
   There is nothing in the configuration that currently uses the joystick.
   For testing, you can add the following configuration options to enable the
@@ -603,11 +531,11 @@ Configurations
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
 
-    2. By default, this configuration uses the CodeSourcery toolchain
+    2. By default, this configuration uses the ARM EABI toolchain
        for Linux.  That can easily be reconfigured, of course.
 
        CONFIG_HOST_LINUX=y                     : Builds under Linux
-       CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYL=y : CodeSourcery for Linux
+       CONFIG_ARMV7M_TOOLCHAIN_GNU_EABIL=y     : GNU EABI toolchain for Linux
 
     3. Although the default console is USART2 (which would correspond to
        the Virtual COM port) I have done all testing with the console
@@ -621,3 +549,91 @@ Configurations
        Pin 33 PA10 USART1_TX    some RS-232 converters
        Pin 20 GND
        Pin 8  U5V
+
+  can:
+  ----
+    This is basically an nsh configuration (see above) with added support
+    for CAN driver. Both CAN 1 (RX: PB_8, TX: PB_9) and CAN 2 (RX: PB_5, TX: PB_6)
+    are turn on.
+
+    Functionality of CAN driver can be tested by calling application
+    "can" in NuttShell. This application sends 100 messages over CAN 1.
+
+  lcd:
+  ----
+    This is basically an nsh configuration (see above) with added support
+    of ILI9225 176x220 TFT display and test framebuffer application.
+
+    Display connection is set to SPI 3 and pinout is following:
+
+    CS    D8
+    RST   D6
+    RS    D7
+    SDA   D4
+    CLK   D3
+
+    Framebuffer application can be started from terminal by typing "fb".
+
+  ihm08m1_f32 and ihm08m1_b16:
+  ----------------------------
+
+    These examples are dedicated for the X-NUCLEO-IHM08M1 expansion board with
+    L6398 gate drivers and discrete transistors.
+
+    WARNING: L6398 gate drivers require channel 2 negative polarisation and
+    negative sign for the deadtime. Make sure that your gate drivers logic
+    is compatible with this configuration.
+
+    X-NUCLEO-IHM08M1 must be configured to work with FOC and 3-shunt
+    resistors. See ST documentation for details.
+
+    Pin configuration for the X-NUCLEO-IHM08M1 (TIM1 configuration):
+
+    Board Function   Chip Function      Chip Pin Number
+    -------------   ----------------   -----------------
+    Phase U high     TIM1_CH1           PA8
+    Phase U low      TIM1_CH1N          PA7
+    Phase V high     TIM1_CH2           PA9
+    Phase V low      TIM1_CH2N          PB0
+    Phase W high     TIM1_CH3           PA10
+    Phase W low      TIM1_CH3N          PB1
+    Current U        ADC1_IN0           PA0
+    Current V        ADC1_IN11          PC1
+    Current W        ADC1_IN10          PC0
+    Temperature      ADC1_IN12          PC2
+    VBUS             ADC1_IN1           PA1
+    BEMF1            (NU)               PC3
+    BEMF2            (NU)               PC4
+    BEMF3            (NU)               PC5
+    LED              GPIO_PB2           PB2
+    +3V3 (CN7_16)
+    GND (CN7_20)
+    GPIO_BEMF        (NU)               PC9
+    ENCO_A/HALL_H1   TIM2_CH1           PA15
+    ENCO_B/HALL_H2   TIM2_CH2           PB3
+    ENCO_Z/HALL_H3   TIM2_CH3           PB10
+    DAC              (NU)               PA5
+    GPIO3            (NU)               PB13
+    CPOUT            (NU)               PA12
+    BKIN1            (NU)               PA6
+    BKIN2            (NU)               PA11
+    BKIN3            (NU)               PB14
+    POT/DAC          DAC1_CH1/ADC1_IN4  PA4
+    CURR_REF         (NU)               PB4
+    DEBUG0           GPIO               PB12
+    DEBUG1           GPIO               PB9
+    DEBUG2           GPIO               PC6
+    DEBUG3           GPIO               PB5
+    DEBUG4           GPIO               PC8
+
+    Current shunt resistance              = 0.01
+    Current sense gain                    = -5.18 (inverted current)
+    Vbus sense gain = 9.31k/(9.31k+169k)  = 0.0522
+    Vbus min                              = 10V
+    Vbus max                              = 48V
+    Iout max                              = 15A RMS
+
+    IPHASE_RATIO = 1/(R_shunt*gain) = -19.3
+    VBUS_RATIO   = 1/VBUS_gain      = 19.152
+
+    For now only 3-shunt resistors configuration is supported.

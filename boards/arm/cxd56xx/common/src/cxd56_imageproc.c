@@ -1,35 +1,20 @@
 /****************************************************************************
  * boards/arm/cxd56xx/common/src/cxd56_imageproc.c
  *
- *   Copyright 2018 Sony Semiconductor Solutions Corporation
- *   Copyright 2018 Sony Corporation
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of Sony Corporation nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -55,7 +40,7 @@
 #include <arch/board/cxd56_imageproc.h>
 
 #include "chip.h"
-#include "up_arch.h"
+#include "arm_arch.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -140,6 +125,10 @@
 #define FIXEDSRC    (1 << 14)
 #define MSBFIRST    (1 << 13)
 
+#ifndef MIN
+#  define MIN(a,b)  (((a) < (b)) ? (a) : (b))
+#endif
+
 /****************************************************************************
  * Private Types
  ****************************************************************************/
@@ -217,8 +206,9 @@ struct __attribute__ ((aligned(16))) ge2d_abcmd_s
 static sem_t g_rotwait;
 static sem_t g_rotexc;
 static sem_t g_geexc;
+static sem_t g_abexc;
 
-static int g_gfd = -1;
+static struct file g_gfile;
 static char g_gcmdbuf[256] __attribute__ ((aligned(16)));
 
 /****************************************************************************
@@ -373,54 +363,47 @@ static void *set_rop_cmd(void *cmdbuf,
   return (void *)((uintptr_t) cmdbuf + sizeof(struct ge2d_ropcmd_s));
 }
 
+static void *set_ab_cmd(void *cmdbuf, void *srcaddr, void *destaddr,
+                        uint16_t srcwidth, uint16_t srcheight,
+                        uint16_t srcpitch, uint16_t destpitch,
+                        void *aaddr, uint16_t apitch,
+                        int options, uint16_t fixedsrc, uint16_t fixedalpha)
+{
+  struct ge2d_abcmd_s *ac = (struct ge2d_abcmd_s *)cmdbuf;
+
+  memset(ac, 0, sizeof(struct ge2d_abcmd_s));
+
+  ac->cmd = ABCMD | options;
+  ac->mode = fixedalpha;
+  ac->srch = srcwidth - 1;
+  ac->srcv = srcheight - 1;
+  ac->saddr = (uint32_t)(uintptr_t)srcaddr | MSEL;
+  ac->daddr = (uint32_t)(uintptr_t)destaddr | MSEL;
+  ac->spitch = srcpitch - 1;
+  ac->dpitch = destpitch - 1;
+  ac->fixedsrc = (uint32_t)fixedsrc;
+  if (aaddr)
+    {
+      ac->aaddr = (uint32_t)(uintptr_t)aaddr | MSEL;
+      ac->apitch = apitch - 1;
+    }
+  else
+    {
+      ac->aaddr = (uint32_t)(uintptr_t)destaddr | MSEL;
+      ac->apitch = destpitch - 1;
+    }
+
+  return (void *)((uintptr_t)cmdbuf + sizeof(struct ge2d_abcmd_s));
+}
+
 static void *set_halt_cmd(void *cmdbuf)
 {
   memset(cmdbuf, 0, 16);
   return (void *)((uintptr_t) cmdbuf + 16);
 }
 
-/****************************************************************************
- * Public Functions
- ****************************************************************************/
-
-void imageproc_initialize(void)
-{
-  nxsem_init(&g_rotexc, 0, 1);
-  nxsem_init(&g_rotwait, 0, 0);
-  nxsem_init(&g_geexc, 0, 1);
-  nxsem_setprotocol(&g_rotwait, SEM_PRIO_NONE);
-
-  cxd56_ge2dinitialize(GEDEVNAME);
-
-  g_gfd = open(GEDEVNAME, O_RDWR);
-
-  putreg32(1, ROT_INTR_CLEAR);
-  putreg32(0, ROT_INTR_ENABLE);
-  putreg32(1, ROT_INTR_DISABLE);
-
-  irq_attach(CXD56_IRQ_ROT, intr_handler_rot, NULL);
-  up_enable_irq(CXD56_IRQ_ROT);
-}
-
-void imageproc_finalize(void)
-{
-  up_disable_irq(CXD56_IRQ_ROT);
-  irq_detach(CXD56_IRQ_ROT);
-
-  if (g_gfd > 0)
-    {
-      close(g_gfd);
-      g_gfd = -1;
-    }
-
-  cxd56_ge2duninitialize(GEDEVNAME);
-
-  nxsem_destroy(&g_rotwait);
-  nxsem_destroy(&g_rotexc);
-  nxsem_destroy(&g_geexc);
-}
-
-void imageproc_convert_yuv2rgb(uint8_t * ibuf,
+static void imageproc_convert_(int      is_yuv2rgb,
+                               uint8_t * ibuf,
                                uint32_t hsize,
                                uint32_t vsize)
 {
@@ -457,13 +440,140 @@ void imageproc_convert_yuv2rgb(uint8_t * ibuf,
 
   putreg32(hsize, ROT_SET_DST_PITCH);
 
-  putreg32(1, ROT_CONV_CTRL);
+  putreg32(is_yuv2rgb ? 1 : 2, ROT_CONV_CTRL);
   putreg32(0, ROT_RGB_ALIGNMENT);
   putreg32(1, ROT_COMMAND);
 
   ip_semtake(&g_rotwait);
 
   ip_semgive(&g_rotexc);
+}
+
+static void get_rect_info(imageproc_imginfo_t *imginfo,
+                          int *offset, int *w, int *h)
+{
+  if (imginfo->rect)
+    {
+      *offset = (imginfo->rect->y1 * imginfo->w)
+              + imginfo->rect->x1;
+      *w      = imginfo->rect->x2 - imginfo->rect->x1 + 1;
+      *h      = imginfo->rect->y2 - imginfo->rect->y1 + 1;
+    }
+  else
+    {
+      *offset = 0;
+      *w      = imginfo->w;
+      *h      = imginfo->h;
+    }
+
+  return;
+}
+
+static int  chk_imgsize(imageproc_imginfo_t *imginfo)
+{
+  if (!imginfo)
+    {
+      return -EINVAL;
+    }
+
+  if ((imginfo->w > HSIZE_MAX) || (imginfo->w < HSIZE_MIN) ||
+      (imginfo->h > VSIZE_MAX) || (imginfo->h < VSIZE_MIN))
+    {
+      return -EINVAL;
+    }
+
+  if (imginfo->rect)
+    {
+      if ((imginfo->rect->x2 <= imginfo->rect->x1) ||
+          (imginfo->rect->y2 <= imginfo->rect->y1))
+        {
+          return -EINVAL;
+        }
+
+      if ((imginfo->rect->x2 >= imginfo->w) ||
+          (imginfo->rect->y2 >= imginfo->h))
+        {
+          return -EINVAL;
+        }
+    }
+
+  return 0;
+}
+
+static void *get_blendarea(imageproc_imginfo_t *imginfo, int offset)
+{
+  switch (imginfo->type)
+    {
+      case IMAGEPROC_IMGTYPE_8BPP:
+        return imginfo->img.p_u8 + offset;
+
+      case IMAGEPROC_IMGTYPE_16BPP:
+        return imginfo->img.p_u16 + offset;
+
+      case IMAGEPROC_IMGTYPE_BINARY:
+        return imginfo->img.binary.p_u8 + offset / 8;
+
+      default:
+        return NULL;
+    }
+
+  return NULL;
+}
+
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
+
+void imageproc_initialize(void)
+{
+  nxsem_init(&g_rotexc, 0, 1);
+  nxsem_init(&g_rotwait, 0, 0);
+  nxsem_init(&g_geexc, 0, 1);
+  nxsem_init(&g_abexc, 0, 1);
+  nxsem_set_protocol(&g_rotwait, SEM_PRIO_NONE);
+
+  cxd56_ge2dinitialize(GEDEVNAME);
+
+  file_open(&g_gfile, GEDEVNAME, O_RDWR);
+
+  putreg32(1, ROT_INTR_CLEAR);
+  putreg32(0, ROT_INTR_ENABLE);
+  putreg32(1, ROT_INTR_DISABLE);
+
+  irq_attach(CXD56_IRQ_ROT, intr_handler_rot, NULL);
+  up_enable_irq(CXD56_IRQ_ROT);
+}
+
+void imageproc_finalize(void)
+{
+  up_disable_irq(CXD56_IRQ_ROT);
+  irq_detach(CXD56_IRQ_ROT);
+
+  if (g_gfile.f_inode)
+    {
+      file_close(&g_gfile);
+    }
+
+  cxd56_ge2duninitialize(GEDEVNAME);
+
+  nxsem_destroy(&g_rotwait);
+  nxsem_destroy(&g_rotexc);
+  nxsem_destroy(&g_geexc);
+  nxsem_destroy(&g_abexc);
+}
+
+void imageproc_convert_yuv2rgb(uint8_t * ibuf,
+                               uint32_t hsize,
+                               uint32_t vsize)
+{
+  imageproc_convert_(1, ibuf, hsize, vsize);
+}
+
+void imageproc_convert_rgb2yuv(uint8_t * ibuf,
+                               uint32_t hsize,
+                               uint32_t vsize)
+{
+  imageproc_convert_(0, ibuf, hsize, vsize);
 }
 
 void imageproc_convert_yuv2gray(uint8_t * ibuf, uint8_t * obuf, size_t hsize,
@@ -494,7 +604,7 @@ int imageproc_resize(uint8_t * ibuf,
   size_t len;
   int ret;
 
-  if (g_gfd <= 0)
+  if (g_gfile.f_inode == NULL)
     {
       return -ENODEV;
     }
@@ -552,7 +662,7 @@ int imageproc_resize(uint8_t * ibuf,
   /* Process resize */
 
   len = (uintptr_t) cmd - (uintptr_t) g_gcmdbuf;
-  ret = write(g_gfd, g_gcmdbuf, len);
+  ret = file_write(&g_gfile, g_gcmdbuf, len);
   if (ret < 0)
     {
       ip_semgive(&g_geexc);
@@ -580,7 +690,7 @@ int imageproc_clip_and_resize(uint8_t * ibuf,
   uint16_t clip_width = 0;
   uint16_t clip_height = 0;
 
-  if (g_gfd <= 0)
+  if (g_gfile.f_inode == NULL)
     {
       return -ENODEV;
     }
@@ -671,7 +781,7 @@ int imageproc_clip_and_resize(uint8_t * ibuf,
   /* Process resize */
 
   len = (uintptr_t) cmd - (uintptr_t) g_gcmdbuf;
-  ret = write(g_gfd, g_gcmdbuf, len);
+  ret = file_write(&g_gfile, g_gcmdbuf, len);
   if (ret < 0)
     {
       ip_semgive(&g_geexc);
@@ -682,3 +792,194 @@ int imageproc_clip_and_resize(uint8_t * ibuf,
 
   return 0;
 }
+
+int imageproc_alpha_blend(imageproc_imginfo_t *dst,
+                          int pos_x,
+                          int pos_y,
+                          imageproc_imginfo_t *src,
+                          imageproc_imginfo_t *alpha)
+{
+  int ret;
+
+  /* Graphic engine control */
+
+  void *cmd = g_gcmdbuf;
+  size_t len;
+
+  /* alpha blend options */
+
+  uint16_t fixed_alpha;
+  uint16_t fixed_src;
+  int      options;
+
+  /* blended rectangles information */
+
+  void *dst_addr;
+  void *src_addr;
+  void *a_addr;
+
+  int  dst_offset;
+  int  dst_w;
+  int  dst_h;
+  int  src_offset;
+  int  src_w;
+  int  src_h;
+  int  a_offset;
+  int  a_w;
+  int  a_h;
+
+  int blendarea_left;
+  int blendarea_right;
+  int blendarea_top;
+  int blendarea_bottom;
+
+  /* Parameter range check */
+
+  ret = chk_imgsize(dst);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = chk_imgsize(src);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = chk_imgsize(alpha);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  /* Determine alpha blend options */
+
+  fixed_src   = 0;
+  fixed_alpha = 0;
+  options     = 0;
+
+  switch (alpha->type)
+    {
+      case IMAGEPROC_IMGTYPE_SINGLE:
+        fixed_alpha = 0x0800 | (uint8_t)alpha->img.single;
+        break;
+
+      case IMAGEPROC_IMGTYPE_BINARY:
+        fixed_alpha = (uint8_t)alpha->img.binary.multiplier;
+        options |= ALPHA1BPP;
+
+        break;
+
+      case IMAGEPROC_IMGTYPE_8BPP:
+
+        /* In this case, no option */
+
+        break;
+
+      default:
+        return -EINVAL;
+    }
+
+  switch (src->type)
+    {
+      case IMAGEPROC_IMGTYPE_SINGLE:
+        options   |= FIXEDSRC;
+        fixed_src =  src->img.single;
+        break;
+
+      case IMAGEPROC_IMGTYPE_16BPP:
+
+        /* In this case, no option */
+
+        break;
+
+      default:
+        return -EINVAL;
+    }
+
+  switch (dst->type)
+    {
+      case IMAGEPROC_IMGTYPE_16BPP:
+
+        /* In this case, no option */
+
+        break;
+
+      default:
+        return -EINVAL;
+    }
+
+  /* Determine offset, width, height of rectangles from IN parameter */
+
+  get_rect_info(dst,   &dst_offset, &dst_w, &dst_h);
+  get_rect_info(src,   &src_offset, &src_w, &src_h);
+  get_rect_info(alpha, &a_offset,   &a_w,   &a_h);
+
+  /* Recalculate offset by calculating overlapped area. */
+
+  blendarea_left   = - MIN(0, pos_x);
+  blendarea_right  = MIN(MIN(a_w, src_w), dst_w - pos_x);
+  blendarea_top    = - MIN(0, pos_y);
+  blendarea_bottom = MIN(MIN(a_h, src_h), dst_h - pos_y);
+
+  if ((blendarea_right  <= blendarea_left) ||
+      (blendarea_bottom <= blendarea_top))
+    {
+      return 0;  /* Not blend due to no overlapped area */
+    }
+
+  dst_offset += ((blendarea_top + pos_y) * dst->w)
+             +  (blendarea_left + pos_x);
+  src_offset += (blendarea_top * src->w) + blendarea_left;
+  a_offset   += (blendarea_top * alpha->w) + blendarea_left;
+
+  dst_addr = get_blendarea(dst,   dst_offset);
+  src_addr = get_blendarea(src,   src_offset);
+  a_addr   = get_blendarea(alpha, a_offset);
+
+  ret = ip_semtake(&g_abexc);
+  if (ret)
+    {
+      return ret; /* -EINTR */
+    }
+
+  /* Create descriptor to graphics engine */
+
+  cmd = set_ab_cmd(cmd,
+                   src_addr,
+                   dst_addr,
+                   blendarea_right  - blendarea_left, /* width   of blended area  */
+                   blendarea_bottom - blendarea_top,  /* height  of blended area  */
+                   src->w,                            /* pitch of src image */
+                   dst->w,                            /* pitch of dst image */
+                   a_addr,
+                   alpha->w,                          /* pitch of alpha plane */
+                   options,
+                   fixed_src,
+                   fixed_alpha);
+
+  if (cmd == NULL)
+    {
+      ip_semgive(&g_abexc);
+      return -EINVAL;
+    }
+
+  /* Terminate command */
+
+  cmd = set_halt_cmd(cmd);
+
+  /* Process alpha blending */
+
+  len = (uintptr_t)cmd - (uintptr_t)g_gcmdbuf;
+  ret = file_write(&g_gfile, g_gcmdbuf, len);
+  if (ret < 0)
+    {
+      ip_semgive(&g_abexc);
+      return -EFAULT;
+    }
+
+  ip_semgive(&g_abexc);
+  return 0;
+}
+

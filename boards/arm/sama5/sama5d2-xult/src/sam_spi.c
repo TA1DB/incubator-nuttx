@@ -1,5 +1,5 @@
 /****************************************************************************
- *  boards/arm/sama5/sama5d2-xult/src/sam_spi.c
+ * boards/arm/sama5/sama5d2-xult/src/sam_spi.c
  *
  *  Licensed to the Apache Software Foundation (ASF) under one or more
  *  contributor license agreements.  See the NOTICE file distributed with
@@ -32,7 +32,7 @@
 #include <nuttx/spi/spi.h>
 #include <arch/board/board.h>
 
-#include "up_arch.h"
+#include "arm_arch.h"
 #include "chip.h"
 #include "sam_pio.h"
 #include "sam_spi.h"

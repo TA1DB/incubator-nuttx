@@ -100,7 +100,7 @@ for more information.  Using the script:
    cd <nuttx-build-directory>
    boards/arm/stm32/stm3210e-eval/tools/oocd.sh $PWD
 
-2) Load Nuttx
+2) Load NuttX
 
    cd <nuttx-built-directory>
    arm-none-eabi-gdb nuttx
@@ -521,7 +521,7 @@ Where <subdir> is one of the following:
     =========== ======================= ================================
     Platform    Windows with Cygwin (2) Windows with Cygwin (2)
     ----------- ----------------------- --------------------------------
-    Toolchain:  NuttX buildroot (1)     Codesourcery for Windows (1)
+    Toolchain:  NuttX buildroot (1)     ARM EABI GCC for Windows (1)
     ----------- ----------------------- --------------------------------
     Loader:     DfuSe                   DfuSe
     ----------- ----------------------- --------------------------------
@@ -558,7 +558,7 @@ Where <subdir> is one of the following:
         you will have to turn local echo on.
     (4) Microsoft holds several patents related to the design of
         long file names in the FAT file system.  Please refer to the
-        details in the top-level COPYING file.  Please do not use FAT
+        details in the top-level NOTICE file.  Please do not use FAT
         long file name unless you are familiar with these patent issues.
     (5) When built as an NSH add-on command (CONFIG_NSH_BUILTIN_APPS=y),
         Caution should be used to assure that the SD drive is not in use when
@@ -606,8 +606,8 @@ Where <subdir> is one of the following:
     focuses on general window controls, movement, mouse and keyboard
     input.
 
-      CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYW=y  : CodeSourcery under Windows
-      CONFIG_LCD_RPORTRAIT=y        : 240x320 reverse portrait
+      CONFIG_ARMV7M_TOOLCHAIN_GNU_EABIW=y : GNU EABI toolchain for Windows
+      CONFIG_LCD_RPORTRAIT=y              : 240x320 reverse portrait
 
     NOTES:
 
@@ -723,7 +723,7 @@ Where <subdir> is one of the following:
           Enable the DJoystick driver:
 
             CONFIG_INPUT=y             # Enable input driver support
-            CONFIG_DJOYSTICK=y         # Enable the joystick drivers
+            CONFIG_INPUT_DJOYSTICK=y   # Enable the joystick drivers
                                        # (default parameters should be okay)
           Enable the DJoystick Example:
 
@@ -795,12 +795,12 @@ Where <subdir> is one of the following:
        b. Execute 'make menuconfig' in nuttx/ in order to start the
           reconfiguration process.
 
-    2. Default configuration is Cygwin under windows using the CodeSourcery
+    2. Default configuration is Cygwin under windows using the ARM EABI
        toolchain:
 
          CONFIG_HOST_WINDOWS=y                   : Windows
          CONFIG_WINDOWS_CYGWIN=y                 : Cygwin
-         CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYW=y : CodeSourcery under Windows
+         CONFIG_ARMV7M_TOOLCHAIN_GNU_EABIW=y     : GNU EABI toolchain for Windows
 
     3. CONFIG_ARCH_CUSTOM_PMINIT and CONFIG_ARCH_IDLE_CUSTOM are necessary
        parts of the PM configuration:

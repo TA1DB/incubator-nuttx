@@ -47,7 +47,7 @@
 
 #include "chip.h"
 #include "hardware/lpc43_usb0.h"
-#include "up_arch.h"
+#include "arm_arch.h"
 
 #include "lpc43_cgu.h"
 #include "hardware/lpc43_creg.h"
@@ -199,7 +199,9 @@ struct lpc43_qh_s
   uint8_t pad[8];                /* Padding to assure 32-byte alignment */
 };
 
-/* Internal representation of the EHCI Queue Element Transfer Descriptor (qTD) */
+/* Internal representation of the EHCI Queue Element Transfer Descriptor
+ * (qTD)
+ */
 
 struct lpc43_qtd_s
 {
@@ -2241,7 +2243,9 @@ static int lpc43_async_setup(struct lpc43_rhport_s *rhport,
           tokenbits |= QTD_TOKEN_PID_IN;
         }
 
-      /* Allocate a new Queue Element Transfer Descriptor (qTD) for the status */
+      /* Allocate a new Queue Element Transfer Descriptor (qTD) for the
+       * status
+       */
 
       qtd = lpc43_qtd_statusphase(tokenbits);
       if (qtd == NULL)
@@ -3881,7 +3885,7 @@ static int lpc43_epalloc(FAR struct usbhost_driver_s *drvr,
    */
 
   nxsem_init(&epinfo->iocsem, 0, 0);
-  nxsem_setprotocol(&epinfo->iocsem, SEM_PRIO_NONE);
+  nxsem_set_protocol(&epinfo->iocsem, SEM_PRIO_NONE);
 
   /* Success.. return an opaque reference to the endpoint information
    * structure instance
@@ -4004,7 +4008,9 @@ static int lpc43_free(FAR struct usbhost_driver_s *drvr, FAR uint8_t *buffer)
 {
   DEBUGASSERT(drvr && buffer);
 
-  /* No special action is require to free the transfer/descriptor buffer memory */
+  /* No special action is require to free the transfer/descriptor buffer
+   * memory
+   */
 
   kmm_free(buffer);
   return OK;
@@ -4148,7 +4154,9 @@ static int lpc43_ctrlin(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep0,
         req->index[1], req->index[0], len);
 #endif
 
-  /* We must have exclusive access to the EHCI hardware and data structures. */
+  /* We must have exclusive access to the EHCI hardware and data
+   * structures.
+   */
 
   ret = lpc43_takesem(&g_ehci.exclsem);
   if (ret < 0)
@@ -4248,7 +4256,9 @@ static ssize_t lpc43_transfer(FAR struct usbhost_driver_s *drvr,
 
   DEBUGASSERT(rhport && epinfo && buffer && buflen > 0);
 
-  /* We must have exclusive access to the EHCI hardware and data structures. */
+  /* We must have exclusive access to the EHCI hardware and
+   * data structures.
+   */
 
   ret = lpc43_takesem(&g_ehci.exclsem);
   if (ret < 0)
@@ -4357,7 +4367,9 @@ static int lpc43_asynch(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep,
 
   DEBUGASSERT(rhport && epinfo && buffer && buflen > 0);
 
-  /* We must have exclusive access to the EHCI hardware and data structures. */
+  /* We must have exclusive access to the EHCI hardware and
+   * data structures.
+   */
 
   ret = lpc43_takesem(&g_ehci.exclsem);
   if (ret < 0)
@@ -4794,7 +4806,9 @@ static int lpc43_reset(void)
       return -ETIMEDOUT;
     }
 
-  /* Now we can set the HCReset bit in the USBCMD register to initiate the reset */
+  /* Now we can set the HCReset bit in the USBCMD register to
+   * initiate the reset
+   */
 
   regval  = lpc43_getreg(&HCOR->usbcmd);
   regval |= EHCI_USBCMD_HCRESET;
@@ -4896,7 +4910,7 @@ FAR struct usbhost_connection_s *lpc43_ehci_initialize(int controller)
    * priority inheritance enabled.
    */
 
-  nxsem_setprotocol(&g_ehci.pscsem, SEM_PRIO_NONE);
+  nxsem_set_protocol(&g_ehci.pscsem, SEM_PRIO_NONE);
 
   /* Initialize EP0 */
 
@@ -4940,7 +4954,7 @@ FAR struct usbhost_connection_s *lpc43_ehci_initialize(int controller)
        */
 
       nxsem_init(&rhport->ep0.iocsem, 0, 0);
-      nxsem_setprotocol(&rhport->ep0.iocsem, SEM_PRIO_NONE);
+      nxsem_set_protocol(&rhport->ep0.iocsem, SEM_PRIO_NONE);
 
       /* Initialize the public port representation */
 
@@ -5213,7 +5227,9 @@ FAR struct usbhost_connection_s *lpc43_ehci_initialize(int controller)
 
   lpc43_putreg(regval, &HCOR->usbcmd);
 
-  /* Start the host controller by setting the RUN bit in the USBCMD register. */
+  /* Start the host controller by setting the RUN bit in the
+   * USBCMD register.
+   */
 
   regval  = lpc43_getreg(&HCOR->usbcmd);
   regval |= EHCI_USBCMD_RUN;

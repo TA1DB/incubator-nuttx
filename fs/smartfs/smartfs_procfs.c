@@ -1,35 +1,20 @@
 /****************************************************************************
  * fs/smartfs/smartfs_procfs.c
  *
- *   Copyright (C) 2013-2014 Ken Pettit. All rights reserved.
- *   Author: Ken Pettit <pettitkd@gmail.com>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -40,7 +25,6 @@
 #include <nuttx/config.h>
 
 #include <sys/types.h>
-#include <sys/statfs.h>
 #include <sys/stat.h>
 
 #include <stdint.h>
@@ -109,7 +93,8 @@ struct smartfs_procfs_entry_s
 {
   const char  *name;                 /* Name of the directory entry */
   size_t (*read)(FAR struct file *filep, FAR char *buffer, size_t buflen);
-  ssize_t (*write)(FAR struct file *filep, FAR const char *buffer, size_t buflen);
+  ssize_t (*write)(FAR struct file *filep,
+                   FAR const char *buffer, size_t buflen);
   uint8_t type;
 };
 
@@ -130,15 +115,16 @@ static ssize_t  smartfs_write(FAR struct file *filep, FAR const char *buffer,
 static int      smartfs_dup(FAR const struct file *oldp,
                  FAR struct file *newp);
 
-static int      smartfs_opendir(const char *relpath, FAR struct fs_dirent_s *dir);
+static int      smartfs_opendir(const char *relpath,
+                  FAR struct fs_dirent_s *dir);
 static int      smartfs_closedir(FAR struct fs_dirent_s *dir);
 static int      smartfs_readdir(FAR struct fs_dirent_s *dir);
 static int      smartfs_rewinddir(FAR struct fs_dirent_s *dir);
 
 static int      smartfs_stat(FAR const char *relpath, FAR struct stat *buf);
 
-static ssize_t  smartfs_debug_write(FAR struct file *filep, FAR const char *buffer,
-                  size_t buflen);
+static ssize_t  smartfs_debug_write(FAR struct file *filep,
+                  FAR const char *buffer, size_t buflen);
 static size_t   smartfs_status_read(FAR struct file *filep, FAR char *buffer,
                   size_t buflen);
 #ifdef CONFIG_MTD_SMART_ALLOC_DEBUG
@@ -146,8 +132,8 @@ static size_t   smartfs_mem_read(FAR struct file *filep, FAR char *buffer,
                   size_t buflen);
 #endif
 #ifdef CONFIG_MTD_SMART_SECTOR_ERASE_DEBUG
-static size_t   smartfs_erasemap_read(FAR struct file *filep, FAR char *buffer,
-                  size_t buflen);
+static size_t   smartfs_erasemap_read(FAR struct file *filep,
+                  FAR char *buffer, size_t buflen);
 #endif
 #ifdef CONFIG_SMARTFS_FILE_SECTOR_DEBUG
 static size_t   smartfs_files_read(FAR struct file *filep, FAR char *buffer,
@@ -299,7 +285,9 @@ static int smartfs_find_dirref(FAR const char *relpath,
 
           if (relpath[0] == '\0')
             {
-              /* Requesting directory listing of a specific SMARTFS mount or entry */
+              /* Requesting directory listing of a specific SMARTFS mount or
+               * entry
+               */
 
               level1->base.level    = 2;
               level1->base.nentries = g_direntrycount;
@@ -318,7 +306,7 @@ static int smartfs_find_dirref(FAR const char *relpath,
                 {
                   /* Test if this entry matches */
 
-                  if (strcmp(relpath, g_direntry[level1->direntry].name) == 0)
+                  if (!strcmp(relpath, g_direntry[level1->direntry].name))
                     {
                       break;
                     }
@@ -368,7 +356,7 @@ static int smartfs_open(FAR struct file *filep, FAR const char *relpath,
 
   /* Allocate a container to hold the task and attribute selection */
 
-  priv = (FAR struct smartfs_file_s *)kmm_malloc(sizeof(struct smartfs_file_s));
+  priv = kmm_malloc(sizeof(struct smartfs_file_s));
   if (!priv)
     {
       ferr("ERROR: Failed to allocate file attributes\n");
@@ -441,7 +429,8 @@ static ssize_t smartfs_read(FAR struct file *filep, FAR char *buffer,
         {
           if (g_direntry[priv->level1.direntry].read)
             {
-              ret = g_direntry[priv->level1.direntry].read(filep, buffer, buflen);
+              ret = g_direntry[priv->level1.direntry].read(filep,
+                                                           buffer, buflen);
             }
         }
     }
@@ -481,7 +470,8 @@ static ssize_t smartfs_write(FAR struct file *filep, FAR const char *buffer,
         {
           if (g_direntry[priv->level1.direntry].write)
             {
-              ret = g_direntry[priv->level1.direntry].write(filep, buffer, buflen);
+              ret = g_direntry[priv->level1.direntry].write(filep,
+                                                            buffer, buflen);
             }
         }
     }
@@ -518,7 +508,7 @@ static int smartfs_dup(FAR const struct file *oldp, FAR struct file *newp)
 
   /* Allocate a new container to hold the task and attribute selection */
 
-  newpriv = (FAR struct smartfs_file_s *)kmm_malloc(sizeof(struct smartfs_file_s));
+  newpriv = kmm_malloc(sizeof(struct smartfs_file_s));
   if (!newpriv)
     {
       ferr("ERROR: Failed to allocate file attributes\n");
@@ -543,7 +533,8 @@ static int smartfs_dup(FAR const struct file *oldp, FAR struct file *newp)
  *
  ****************************************************************************/
 
-static int smartfs_opendir(FAR const char *relpath, FAR struct fs_dirent_s *dir)
+static int smartfs_opendir(FAR const char *relpath,
+                           FAR struct fs_dirent_s *dir)
 {
   FAR struct smartfs_level1_s *level1;
   int        ret;
@@ -650,7 +641,7 @@ static int smartfs_readdir(struct fs_dirent_s *dir)
 
           dir->fd_dir.d_type = DTYPE_DIRECTORY;
           strncpy(dir->fd_dir.d_name, level1->mount->fs_blkdriver->i_name,
-                  NAME_MAX + 1);
+                  NAME_MAX);
 
           /* Advance to next entry */
 
@@ -663,7 +654,7 @@ static int smartfs_readdir(struct fs_dirent_s *dir)
 
           dir->fd_dir.d_type = g_direntry[level1->base.index].type;
           strncpy(dir->fd_dir.d_name, g_direntry[level1->base.index++].name,
-                  NAME_MAX + 1);
+                  NAME_MAX);
         }
       else if (level1->base.level == 3)
         {
@@ -671,7 +662,7 @@ static int smartfs_readdir(struct fs_dirent_s *dir)
 
           dir->fd_dir.d_type = g_direntry[level1->base.index].type;
           strncpy(dir->fd_dir.d_name, g_direntry[level1->direntry].name,
-                  NAME_MAX + 1);
+                  NAME_MAX);
           level1->base.index++;
         }
 
@@ -766,8 +757,8 @@ static int smartfs_stat(const char *relpath, struct stat *buf)
  *
  ****************************************************************************/
 
-static ssize_t smartfs_debug_write(FAR struct file *filep, FAR const char *buffer,
-                                  size_t buflen)
+static ssize_t smartfs_debug_write(FAR struct file *filep,
+                                   FAR const char *buffer, size_t buflen)
 {
   struct mtd_smart_debug_data_s debug_data;
   FAR struct smartfs_file_s *priv;
@@ -836,14 +827,16 @@ static size_t smartfs_status_read(FAR struct file *filep, FAR char *buffer,
 
           /* Format and return data in the buffer */
 
-          len = snprintf(buffer, buflen, "Format version:    %d\nName Len:          %d\n"
-                                         "Total Sectors:     %d\nSector Size:       %d\n"
-                                         "Format Sector:     %d\nDir Sector:        %d\n"
-                                         "Free Sectors:      %d\nReleased Sectors:  %d\n"
-                                         "Unused Sectors:    %d\nBlock Erases:      %d\n"
-                                         "Sectors Per Block: %d\nSector Utilization:%d%%\n"
+          len = snprintf(buffer, buflen,
+                         "Format version:    %d\nName Len:          %d\n"
+                         "Total Sectors:     %d\nSector Size:       %d\n"
+                         "Format Sector:     %d\nDir Sector:        %d\n"
+                         "Free Sectors:      %d\nReleased Sectors:  %d\n"
+                         "Unused Sectors:    %" PRIu32 "\n"
+                         "Block Erases:      %" PRIu32 "\n"
+                         "Sectors Per Block: %d\nSector Utilization:%d%%\n"
 #ifdef CONFIG_MTD_SMART_WEAR_LEVEL
-                                         "Uneven Wear Count: %d\n"
+                         "Uneven Wear Count: %" PRIu32 "\n"
 #endif
                   ,
                   procfs_data.formatversion, procfs_data.namelen,
@@ -912,14 +905,15 @@ static size_t   smartfs_mem_read(FAR struct file *filep, FAR char *buffer,
               if (procfs_data.allocs[x].ptr != NULL)
                 {
                   len += snprintf(&buffer[len], buflen - len, "   %s: %d\n",
-                      procfs_data.allocs[x].name, procfs_data.allocs[x].size);
+                    procfs_data.allocs[x].name, procfs_data.allocs[x].size);
                   total += procfs_data.allocs[x].size;
                 }
             }
 
           /* Add the total allocation amount to the buffer */
 
-          len += snprintf(&buffer[len], buflen - len, "\nTotal: %d\n", total);
+          len += snprintf(&buffer[len], buflen - len,
+                          "\nTotal: %d\n", total);
         }
 
       /* Indicate we have done the read */
@@ -939,8 +933,8 @@ static size_t   smartfs_mem_read(FAR struct file *filep, FAR char *buffer,
  ****************************************************************************/
 
 #ifdef CONFIG_MTD_SMART_SECTOR_ERASE_DEBUG
-static size_t   smartfs_erasemap_read(FAR struct file *filep, FAR char *buffer,
-                  size_t buflen)
+static size_t   smartfs_erasemap_read(FAR struct file *filep,
+                                      FAR char *buffer, size_t buflen)
 {
   struct mtd_smart_procfs_data_s procfs_data;
   FAR struct smartfs_file_s *priv;
@@ -994,7 +988,8 @@ static size_t   smartfs_erasemap_read(FAR struct file *filep, FAR char *buffer,
 
               if (copylen >= priv->offset)
                 {
-                  buffer[len++] = procfs_data.erasecounts[y * cols + x] + 'A';
+                  buffer[len++] =
+                    procfs_data.erasecounts[y * cols + x] + 'A';
                   priv->offset++;
 
                   if (len >= buflen)

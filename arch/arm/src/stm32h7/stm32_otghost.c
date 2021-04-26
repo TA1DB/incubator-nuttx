@@ -1,37 +1,20 @@
 /****************************************************************************
  * arch/arm/src/stm32h7/stm32_otghost.c
  *
- *   Copyright (C) 2019 Gregory Nutt. All rights reserved.
- *   Authors: Gregory Nutt <gnutt@nuttx.org>
- *            David Sidrane <david_s5@nscdg.com>
- *   Modified for STM32H7 by Mateusz Szafoni <raiden00@railab.me>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -42,6 +25,7 @@
 #include <nuttx/config.h>
 
 #include <sys/types.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -65,17 +49,15 @@
 #include "chip.h"             /* Includes default GPIO settings */
 #include <arch/board/board.h> /* May redefine GPIO settings */
 
-#include "up_arch.h"
-#include "up_internal.h"
+#include "arm_arch.h"
+#include "arm_internal.h"
 
 #include "hardware/stm32_pwr.h"
 #include "stm32_gpio.h"
 #include "stm32_otg.h"
 #include "stm32_usbhost.h"
 
-#if defined(CONFIG_USBHOST) && defined(CONFIG_STM32H7_OTGFS) && defined(CONFIG_EXPERIMENTAL)
-
-#warning OTG host not tested for STM32H7!
+#if defined(CONFIG_USBHOST) && defined(CONFIG_STM32H7_OTGFS)
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -1231,7 +1213,7 @@ static void stm32_chan_wakeup(FAR struct stm32_usbhost_s *priv,
  ****************************************************************************/
 
 static int stm32_ctrlchan_alloc(FAR struct stm32_usbhost_s *priv,
-                                uint8_t epno, uint8_t funcaddr
+                                uint8_t epno, uint8_t funcaddr,
                                 uint8_t speed,
                                 FAR struct stm32_ctrlinfo_s *ctrlep)
 {
@@ -1583,7 +1565,9 @@ static void stm32_transfer_start(FAR struct stm32_usbhost_s *priv, int chidx)
 
       if (minsize <= avail)
         {
-          /* Yes.. Get the size of the biggest thing that we can put in the Tx FIFO now */
+          /* Yes.. Get the size of the biggest thing that we can put
+           * in the Tx FIFO now
+           */
 
           wrsize = chan->buflen;
           if (wrsize > avail)
@@ -1652,7 +1636,7 @@ static int stm32_ctrl_sendsetup(FAR struct stm32_usbhost_s *priv,
   /* Loop while the device reports NAK (and a timeout is not exceeded */
 
   chan  = &priv->chan[ep0->outndx];
-  start = clock_systimer();
+  start = clock_systime_ticks();
 
   do
     {
@@ -1701,7 +1685,7 @@ static int stm32_ctrl_sendsetup(FAR struct stm32_usbhost_s *priv,
 
       /* Get the elapsed time (in frames) */
 
-      elapsed = clock_systimer() - start;
+      elapsed = clock_systime_ticks() - start;
     }
   while (elapsed < STM32_SETUP_DELAY);
 
@@ -1890,7 +1874,7 @@ static ssize_t stm32_in_transfer(FAR struct stm32_usbhost_s *priv, int chidx,
   chan->xfrd   = 0;
   xfrd         = 0;
 
-  start = clock_systimer();
+  start = clock_systime_ticks();
   while (chan->xfrd < chan->buflen)
     {
       /* Set up for the wait BEFORE starting the transfer */
@@ -1902,7 +1886,7 @@ static ssize_t stm32_in_transfer(FAR struct stm32_usbhost_s *priv, int chidx,
           return (ssize_t)ret;
         }
 
-      /* Set up for the transfer based on the direction and the endpoint type */
+      /* Set up for the transfer based on the direction and the endpoint */
 
       ret = stm32_in_setup(priv, chidx);
       if (ret < 0)
@@ -1947,7 +1931,7 @@ static ssize_t stm32_in_transfer(FAR struct stm32_usbhost_s *priv, int chidx,
                    * if not then try again.
                    */
 
-                  clock_t elapsed = clock_systimer() - start;
+                  clock_t elapsed = clock_systime_ticks() - start;
                   if (elapsed >= STM32_DATANAK_DELAY)
                     {
                       /* Timeout out... break out returning the NAK as
@@ -2068,7 +2052,7 @@ static void stm32_in_next(FAR struct stm32_usbhost_s *priv,
   int result;
   int ret;
 
-  /* Is the full transfer complete? Did the last chunk transfer complete OK? */
+  /* Is the full transfer complete? Did the last chunk transfer OK? */
 
   result = -(int)chan->result;
   if (chan->xfrd < chan->buflen && result == OK)
@@ -2131,7 +2115,7 @@ static int stm32_in_asynch(FAR struct stm32_usbhost_s *priv, int chidx,
   FAR struct stm32_chan_s *chan;
   int ret;
 
-  /* Set up for the transfer data and callback BEFORE starting the first transfer */
+  /* Set up for the transfer BEFORE starting the first transfer */
 
   chan         = &priv->chan[chidx];
   chan->buffer = buffer;
@@ -2249,7 +2233,7 @@ static ssize_t stm32_out_transfer(FAR struct stm32_usbhost_s *priv,
    */
 
   chan  = &priv->chan[chidx];
-  start = clock_systimer();
+  start = clock_systime_ticks();
   xfrd  = 0;
   zlp   = (buflen == 0);
 
@@ -2274,7 +2258,7 @@ static ssize_t stm32_out_transfer(FAR struct stm32_usbhost_s *priv,
           return (ssize_t)ret;
         }
 
-      /* Set up for the transfer based on the direction and the endpoint type */
+      /* Set up for the transfer based on the direction and the endpoint */
 
       ret = stm32_out_setup(priv, chidx);
       if (ret < 0)
@@ -2300,7 +2284,7 @@ static ssize_t stm32_out_transfer(FAR struct stm32_usbhost_s *priv,
            * pointer and buffer size will be unaltered.
            */
 
-          elapsed = clock_systimer() - start;
+          elapsed = clock_systime_ticks() - start;
           if (ret != -EAGAIN ||                  /* Not a NAK condition OR */
               elapsed >= STM32_DATANAK_DELAY ||  /* Timeout has elapsed OR */
               chan->xfrd > 0)                    /* Data has been partially transferred */
@@ -2325,7 +2309,7 @@ static ssize_t stm32_out_transfer(FAR struct stm32_usbhost_s *priv,
         }
       else
         {
-          /* Successfully transferred.  Update the buffer pointer and length */
+          /* Successfully transferred.  Update the buffer pointe/length */
 
           buffer += xfrlen;
           buflen -= xfrlen;
@@ -2358,7 +2342,7 @@ static void stm32_out_next(FAR struct stm32_usbhost_s *priv,
   int result;
   int ret;
 
-  /* Is the full transfer complete? Did the last chunk transfer complete OK? */
+  /* Is the full transfer complete? Did the last chunk transfer OK? */
 
   result = -(int)chan->result;
   if (chan->xfrd < chan->buflen && result == OK)
@@ -2421,7 +2405,7 @@ static int stm32_out_asynch(FAR struct stm32_usbhost_s *priv, int chidx,
   FAR struct stm32_chan_s *chan;
   int ret;
 
-  /* Set up for the transfer data and callback BEFORE starting the first transfer */
+  /* Set up for the transfer BEFORE starting the first transfer */
 
   chan         = &priv->chan[chidx];
   chan->buffer = buffer;
@@ -2525,13 +2509,14 @@ static inline void stm32_gint_hcinisr(FAR struct stm32_usbhost_s *priv,
   /* AND the two to get the set of enabled, pending HC interrupts */
 
   pending &= regval;
-  uinfo("HCINTMSK%d: %08x pending: %08x\n", chidx, regval, pending);
+  uinfo("HCINTMSK%d: %08" PRIx32 " pending: %08" PRIx32 "\n",
+        chidx, regval, pending);
 
-  /* Check for a pending ACK response received/transmitted (ACK) interrupt */
+  /* Check for a pending ACK response received/transmitted interrupt */
 
   if ((pending & OTG_HCINT_ACK) != 0)
     {
-      /* Clear the pending the ACK response received/transmitted (ACK) interrupt */
+      /* Clear the pending the ACK response received/transmitted interrupt */
 
       stm32_putreg(STM32_OTG_HCINT(chidx), OTG_HCINT_ACK);
     }
@@ -2593,7 +2578,7 @@ static inline void stm32_gint_hcinisr(FAR struct stm32_usbhost_s *priv,
 
       stm32_putreg(STM32_OTG_HCINT(chidx), OTG_HCINT_XFRC);
 
-      /* Then handle the transfer completion event based on the endpoint type */
+      /* Then handle the transfer completion event based on the endpoint */
 
       if (chan->eptype == OTG_EPTYPE_CTRL || chan->eptype == OTG_EPTYPE_BULK)
         {
@@ -2727,7 +2712,7 @@ static inline void stm32_gint_hcinisr(FAR struct stm32_usbhost_s *priv,
         }
 
 #else
-      /* Halt all transfers on the NAK -- the CHH interrupt is expected next */
+      /* Halt all transfers on the NAK -- CHH interrupt is expected next */
 
       stm32_chan_halt(priv, chidx, CHREASON_NAK);
 #endif
@@ -2778,13 +2763,14 @@ static inline void stm32_gint_hcoutisr(FAR struct stm32_usbhost_s *priv,
   /* AND the two to get the set of enabled, pending HC interrupts */
 
   pending &= regval;
-  uinfo("HCINTMSK%d: %08x pending: %08x\n", chidx, regval, pending);
+  uinfo("HCINTMSK%d: %08" PRIx32 " pending: %08" PRIx32 "\n",
+        chidx, regval, pending);
 
-  /* Check for a pending ACK response received/transmitted (ACK) interrupt */
+  /* Check for a pending ACK response received/transmitted interrupt */
 
   if ((pending & OTG_HCINT_ACK) != 0)
     {
-      /* Clear the pending the ACK response received/transmitted (ACK) interrupt */
+      /* Clear the pending the ACK response received/transmitted interrupt */
 
       stm32_putreg(STM32_OTG_HCINT(chidx), OTG_HCINT_ACK);
     }
@@ -3098,13 +3084,13 @@ static inline void stm32_gint_rxflvlisr(FAR struct stm32_usbhost_s *priv)
   /* Read and pop the next status from the Rx FIFO */
 
   grxsts = stm32_getreg(STM32_OTG_GRXSTSP);
-  uinfo("GRXSTS: %08x\n", grxsts);
+  uinfo("GRXSTS: %08" PRIx32 "\n", grxsts);
 
   /* Isolate the channel number/index in the status word */
 
   chidx = (grxsts & OTG_GRXSTSH_CHNUM_MASK) >> OTG_GRXSTSH_CHNUM_SHIFT;
 
-  /* Get the host channel characteristics register (HCCHAR) for this channel */
+  /* Get the host channel characteristics register (HCCHAR) */
 
   hcchar = stm32_getreg(STM32_OTG_HCCHAR(chidx));
 
@@ -3252,7 +3238,7 @@ static inline void stm32_gint_nptxfeisr(FAR struct stm32_usbhost_s *priv)
 
   /* Write the next group of packets into the Tx FIFO */
 
-  uinfo("HNPTXSTS: %08x chidx: %d avail: %d buflen: %d xfrd: %d "
+  uinfo("HNPTXSTS: %08" PRIx32 " chidx: %d avail: %d buflen: %d xfrd: %d "
         "wrsize: %d\n",
         regval, chidx, avail, chan->buflen, chan->xfrd, wrsize);
 
@@ -3342,8 +3328,9 @@ static inline void stm32_gint_ptxfeisr(FAR struct stm32_usbhost_s *priv)
 
   /* Write the next group of packets into the Tx FIFO */
 
-  uinfo("HPTXSTS: %08x chidx: %d avail: %d buflen: %d xfrd: %d wrsize: %d\n",
-           regval, chidx, avail, chan->buflen, chan->xfrd, wrsize);
+  uinfo("HPTXSTS: %08" PRIx32
+        " chidx: %d avail: %d buflen: %d xfrd: %d wrsize: %d\n",
+        regval, chidx, avail, chan->buflen, chan->xfrd, wrsize);
 
   stm32_gint_wrpacket(priv, chan->buffer, chidx, wrsize);
 }
@@ -3753,7 +3740,7 @@ static inline void stm32_hostinit_enable(void)
 
   stm32_putreg(STM32_OTG_GINTSTS, 0xffffffff);
 
-  /* Clear any pending USB OTG Interrupts (should be done elsewhere if OTG is supported) */
+  /* Clear any pending USB OTG Interrupts */
 
   stm32_putreg(STM32_OTG_GOTGINT, 0xffffffff);
 
@@ -4118,7 +4105,7 @@ static int stm32_ep0configure(FAR struct usbhost_driver_s *drvr,
   DEBUGASSERT(drvr != NULL && ep0info != NULL && funcaddr < 128 &&
               maxpacketsize <= 64);
 
-  /* We must have exclusive access to the USB host hardware and state structures */
+  /* We must have exclusive access to the USB host hardware and structures */
 
   ret = stm32_takesem(&priv->exclsem);
   if (ret < 0)
@@ -4235,10 +4222,11 @@ static int stm32_epalloc(FAR struct usbhost_driver_s *drvr,
 static int stm32_epfree(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep)
 {
   FAR struct stm32_usbhost_s *priv = (FAR struct stm32_usbhost_s *)drvr;
+  int ret;
 
   DEBUGASSERT(priv);
 
-  /* We must have exclusive access to the USB host hardware and state structures */
+  /* We must have exclusive access to the USB host hardware and structures */
 
   ret = stm32_takesem_noncancelable(&priv->exclsem);
 
@@ -4502,7 +4490,7 @@ static int stm32_ctrlin(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep0,
 
   buflen = stm32_getle16(req->len);
 
-  /* We must have exclusive access to the USB host hardware and state structures */
+  /* We must have exclusive access to the USB host hardware and structures */
 
   ret = stm32_takesem(&priv->exclsem);
   if (ret < 0)
@@ -4537,7 +4525,7 @@ static int stm32_ctrlin(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep0,
 
       /* Get the start time.  Loop again until the timeout expires */
 
-      start = clock_systimer();
+      start = clock_systime_ticks();
       do
         {
           /* Handle the status OUT phase */
@@ -4556,12 +4544,12 @@ static int stm32_ctrlin(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep0,
 
           /* Get the elapsed time (in frames) */
 
-          elapsed = clock_systimer() - start;
+          elapsed = clock_systime_ticks() - start;
         }
       while (elapsed < STM32_DATANAK_DELAY);
     }
 
-  /* All failures exit here after all retries and timeouts have been exhausted */
+  /* All failures exit here after all retries and timeouts are exhausted */
 
   stm32_givesem(&priv->exclsem);
   return -ETIMEDOUT;
@@ -4589,7 +4577,7 @@ static int stm32_ctrlout(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep0,
 
   buflen = stm32_getle16(req->len);
 
-  /* We must have exclusive access to the USB host hardware and state structures */
+  /* We must have exclusive access to the USB host hardware and structures */
 
   ret = stm32_takesem(&priv->exclsem);
   if (ret < 0)
@@ -4612,7 +4600,7 @@ static int stm32_ctrlout(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep0,
 
       /* Get the start time.  Loop again until the timeout expires */
 
-      start = clock_systimer();
+      start = clock_systime_ticks();
       do
         {
           /* Handle the data OUT phase (if any) */
@@ -4648,12 +4636,12 @@ static int stm32_ctrlout(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep0,
 
           /* Get the elapsed time (in frames) */
 
-          elapsed = clock_systimer() - start;
+          elapsed = clock_systime_ticks() - start;
         }
       while (elapsed < STM32_DATANAK_DELAY);
     }
 
-  /* All failures exit here after all retries and timeouts have been exhausted */
+  /* All failures exit here after all retries and timeouts are exhausted */
 
   stm32_givesem(&priv->exclsem);
   return -ETIMEDOUT;
@@ -4711,7 +4699,7 @@ static ssize_t stm32_transfer(FAR struct usbhost_driver_s *drvr,
 
   DEBUGASSERT(priv && buffer && chidx < STM32_MAX_TX_FIFOS && buflen > 0);
 
-  /* We must have exclusive access to the USB host hardware and state structures */
+  /* We must have exclusive access to the USB host hardware and structures */
 
   ret = stm32_takesem(&priv->exclsem);
   if (ret < 0)
@@ -4783,7 +4771,7 @@ static int stm32_asynch(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep,
 
   DEBUGASSERT(priv && buffer && chidx < STM32_MAX_TX_FIFOS && buflen > 0);
 
-  /* We must have exclusive access to the USB host hardware and state structures */
+  /* We must have exclusive access to the USB host hardware and structures */
 
   ret = stm32_takesem(&priv->exclsem);
   if (ret < 0)
@@ -4833,7 +4821,7 @@ static int stm32_cancel(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep)
   unsigned int chidx = (unsigned int)ep;
   irqstate_t flags;
 
-  uinfo("chidx: %u: %d\n",  chidx);
+  uinfo("chidx: %u\n",  chidx);
 
   DEBUGASSERT(priv && chidx < STM32_MAX_TX_FIFOS);
   chan = &priv->chan[chidx];
@@ -5301,7 +5289,7 @@ static inline void stm32_sw_initialize(FAR struct stm32_usbhost_s *priv)
    * priority inheritance enabled.
    */
 
-  nxsem_setprotocol(&priv->pscsem, SEM_PRIO_NONE);
+  nxsem_set_protocol(&priv->pscsem, SEM_PRIO_NONE);
 
   /* Initialize the driver state data */
 
@@ -5326,7 +5314,7 @@ static inline void stm32_sw_initialize(FAR struct stm32_usbhost_s *priv)
        */
 
       nxsem_init(&chan->waitsem,  0, 0);
-      nxsem_setprotocol(&chan->waitsem, SEM_PRIO_NONE);
+      nxsem_set_protocol(&chan->waitsem, SEM_PRIO_NONE);
     }
 }
 
@@ -5479,7 +5467,7 @@ FAR struct usbhost_connection_s *stm32_otgfshost_initialize(int controller)
   /* Enable VDD33USB supply level detector */
 
   regval |= STM32_PWR_CR3_USB33DEN;
-  stm32_putreg(regval, STM32_PWR_CR3);
+  stm32_putreg(STM32_PWR_CR3, regval);
 
   while ((stm32_getreg(STM32_PWR_CR3) & STM32_PWR_CR3_USB33RDY) == 0)
     {
@@ -5539,34 +5527,5 @@ FAR struct usbhost_connection_s *stm32_otgfshost_initialize(int controller)
   up_enable_irq(STM32_IRQ_OTGFS);
   return &g_usbconn;
 }
-
-#if defined(CONFIG_USBHOST_TRACE) || defined(CONFIG_DEBUG_USB)
-/****************************************************************************
- * Name: usbhost_trformat1 and usbhost_trformat2
- *
- * Description:
- *   This interface must be provided by platform specific logic that knows
- *   the HCDs encoding of USB trace data.
- *
- *   Given an 9-bit index, return a format string suitable for use with, say,
- *   printf.  The returned format is expected to handle two unsigned integer
- *   values.
- *
- ****************************************************************************/
-
-FAR const char *usbhost_trformat1(uint16_t id)
-{
-  /* TODO: */
-
-  return NULL;
-}
-
-FAR const char *usbhost_trformat2(uint16_t id)
-{
-  /* TODO: */
-
-  return NULL;
-}
-#endif /* CONFIG_USBHOST_TRACE && CONFIG_DEBUG_USB */
 
 #endif /* CONFIG_USBHOST && CONFIG_STM32H7_OTGFS */

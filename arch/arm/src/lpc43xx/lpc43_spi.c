@@ -1,35 +1,20 @@
 /****************************************************************************
  * arch/arm/src/lpc43xx/lpc43_spi.c
  *
- *   Copyright (C) 2015-2017 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -50,8 +35,8 @@
 #include <nuttx/semaphore.h>
 #include <nuttx/spi/spi.h>
 
-#include "up_internal.h"
-#include "up_arch.h"
+#include "arm_internal.h"
+#include "arm_arch.h"
 
 #include "chip.h"
 #include "lpc43_pinconfig.h"
@@ -219,7 +204,9 @@ static uint32_t spi_setfrequency(FAR struct spi_dev_s *dev,
   uint32_t divisor;
   uint32_t actual;
 
-  /* Check if the requested frequence is the same as the frequency selection */
+  /* Check if the requested frequence is the same as the frequency
+   * selection.
+   */
 
   DEBUGASSERT(priv && frequency <= SPI_CLOCK / 2);
 
@@ -234,7 +221,9 @@ static uint32_t spi_setfrequency(FAR struct spi_dev_s *dev,
 
   divisor = SPI_CLOCK / frequency;
 
-  /* The SPI CCR register must contain an even number greater than or equal to 8. */
+  /* The SPI CCR register must contain an even number greater than or equal
+   * to 8.
+   */
 
   if (divisor < 8)
     {
@@ -317,7 +306,7 @@ static void spi_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode)
 
       putreg32(regval, LPC43_SPI_CR);
 
-      /* Save the mode so that subsequent re-configuratins will be faster */
+      /* Save the mode so that subsequent re-configurations will be faster */
 
       priv->mode = mode;
     }
@@ -331,7 +320,7 @@ static void spi_setmode(FAR struct spi_dev_s *dev, enum spi_mode_e mode)
  *
  * Input Parameters:
  *   dev -  Device-specific state data
- *   nbits - The number of bits requests
+ *   nbits - The number of bits requested
  *
  * Returned Value:
  *   none
@@ -357,7 +346,9 @@ static void spi_setbits(FAR struct spi_dev_s *dev, int nbits)
       regval |= SPI_CR_BITENABLE;
       regval = getreg32(LPC43_SPI_CR);
 
-      /* Save the selection so the subsequence re-configurations will be faster */
+      /* Save the selection so that subsequent re-configurations will be
+       * faster.
+       */
 
       priv->nbits = nbits;
     }

@@ -1,35 +1,20 @@
 #!/usr/bin/env bash
 # tools/zipme.sh
 #
-#   Copyright (C) 2007-2011, 2013 Gregory Nutt. All rights reserved.
-#   Author: Gregory Nutt <gnutt@nuttx.org>
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.  The
+# ASF licenses this file to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance with the
+# License.  You may obtain a copy of the License at
 #
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions
-# are met:
+#   http://www.apache.org/licenses/LICENSE-2.0
 #
-# 1. Redistributions of source code must retain the above copyright
-#    notice, this list of conditions and the following disclaimer.
-# 2. Redistributions in binary form must reproduce the above copyright
-#    notice, this list of conditions and the following disclaimer in
-#    the documentation and/or other materials provided with the
-#    distribution.
-# 3. Neither the name NuttX nor the names of its contributors may be
-#    used to endorse or promote products derived from this software
-#    without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
-# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-# COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
-# OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
-# AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-# POSSIBILITY OF SUCH DAMAGE.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+# License for the specific language governing permissions and limitations
+# under the License.
 #
 
 #set -x
@@ -50,7 +35,7 @@ EXCLPAT="
 "
 # Get command line parameters
 
-USAGE="USAGE: $0 [-d|h|v|s] [-b <build]> [-e <exclude>] [-k <key-id>] <major.minor.patch>"
+USAGE="USAGE: $0 [-d|h|v|s] [-b <build]> [-e <exclude>] [-k <key-id>] [<major.minor.patch>]"
 ADVICE="Try '$0 -h' for more information"
 
 unset VERSION
@@ -95,14 +80,14 @@ while [ ! -z "$1" ]; do
     echo "     Enable script debug"
     echo "  -h"
     echo "     show this help message and exit"
-    echo "   -e"
+    echo "  -e"
     echo "     Exclude a list of files or folders"
     echo "     NOTE: The list must be quoted, example -e \"*.out tmp\""
-    echo "   -v"
+    echo "  -v"
     echo "     Be verbose. The output could be more than you care to see."
-    echo "   -s"
+    echo "  -s"
     echo "    PGP sign the final tarballs and create digests."
-    echo "   -k"
+    echo "  -k"
     echo "    PGP key ID.  If not provided the default ID will be used."
     echo "  <major.minor.patch>"
     echo "     The NuttX version number expressed as a major, minor and patch number separated"
@@ -119,7 +104,9 @@ done
 # The last thing on the command line is the version number
 
 VERSION=$1
-VERSIONOPT="-v ${VERSION}"
+if [ -n ${VERSION} ] ; then
+  VERSIONOPT="-v ${VERSION}"
+fi
 
 # Full tar options
 
@@ -127,21 +114,12 @@ for pat in ${EXCLPAT} ; do
   TAR+=" --exclude=${pat}"
 done
 
-TAR+=" --exclude-vcs-ignores --exclude-vcs"
+TAR+=" --exclude-vcs"
 
 if [ $verbose != 0 ] ; then
   TAR+=" -czvf"
 else
   TAR+=" -czf"
-fi
-
-# Make sure we know what is going on
-
-if [ -z ${VERSION} ] ; then
-  echo "You must supply a version like xx.yy as a parameter"
-  echo $USAGE
-  echo $ADVICE
-  exit 1;
 fi
 
 # Find the directory we were executed from and were we expect to
@@ -189,23 +167,17 @@ if [ ! -d ${APPSDIR} ] ; then
   exit 1
 fi
 
-# Create the versioned tarball names
+# Perform a full clean for the distribution
 
-NUTTX_TARNAME=apache-nuttx-${VERSION}-incubating.tar
-APPS_TARNAME=apache-nuttx-apps-${VERSION}-incubating.tar
-NUTTX_ZIPNAME=${NUTTX_TARNAME}.gz
-APPS_ZIPNAME=${APPS_TARNAME}.gz
-NUTTX_ASCNAME=${NUTTX_ZIPNAME}.asc
-APPS_ASCNAME=${APPS_ZIPNAME}.asc
-NUTTX_SHANAME=${NUTTX_ZIPNAME}.sha512
-APPS_SHANAME=${APPS_ZIPNAME}.sha512
+echo "Cleaning the repositories"
+
+if [ $verbose != 0 ] ; then
+  make -C ${NUTTXDIR} distclean
+else
+  make -C ${NUTTXDIR} distclean 1>/dev/null
+fi
 
 # Prepare the nuttx directory
-
-# Make sure that versioned copies of certain files are in place
-
-cd ${NUTTXDIR}/Documentation || \
-   { echo "Failed to cd to ${NUTTXDIR}/Documentation" ; exit 1 ; }
 
 # Write a version file into the NuttX directory.  The syntax of file is such that it
 # may be sourced by a bash script or included by a Makefile.
@@ -220,6 +192,12 @@ ${VERSIONSH} ${DEBUG} ${BUILD} ${VERSIONOPT} ${NUTTXDIR}/.version || \
     { echo "${VERSIONSH} failed"; cat ${NUTTXDIR}/.version; exit 1; }
 chmod 755 ${NUTTXDIR}/.version || \
     { echo "'chmod 755 ${NUTTXDIR}/.version' failed"; exit 1; }
+
+if [ -z ${VERSION} ] ; then
+  source ${NUTTXDIR}/.version
+  VERSION=${CONFIG_VERSION_STRING}
+  VERSIONOPT="-v ${VERSION}"
+fi
 
 # Update the configuration variable documentation
 #
@@ -240,18 +218,16 @@ chmod 755 ${NUTTXDIR}/.version || \
 #     { echo "'chmod 644 ${CONFIGVARHTML}' failed"; exit 1; }
 #
 
-# Perform a full clean for the distribution
+# Create the versioned tarball names
 
-cd ${TRUNKDIR} || \
-   { echo "Failed to cd to ${TRUNKDIR}" ; exit 1 ; }
-
-echo "Cleaning the repositories"
-
-if [ $verbose != 0 ] ; then
-  make -C ${NUTTXDIR} distclean
-else
-  make -C ${NUTTXDIR} distclean 1>/dev/null
-fi
+NUTTX_TARNAME=apache-nuttx-${VERSION}-incubating.tar
+APPS_TARNAME=apache-nuttx-apps-${VERSION}-incubating.tar
+NUTTX_ZIPNAME=${NUTTX_TARNAME}.gz
+APPS_ZIPNAME=${APPS_TARNAME}.gz
+NUTTX_ASCNAME=${NUTTX_ZIPNAME}.asc
+APPS_ASCNAME=${APPS_ZIPNAME}.asc
+NUTTX_SHANAME=${NUTTX_ZIPNAME}.sha512
+APPS_SHANAME=${APPS_ZIPNAME}.sha512
 
 # Remove any previous tarballs
 

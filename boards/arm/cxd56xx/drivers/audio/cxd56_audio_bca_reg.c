@@ -1,35 +1,20 @@
 /****************************************************************************
  * boards/arm/cxd56xx/drivers/audio/cxd56_audio_bca_reg.c
  *
- *   Copyright 2018 Sony Semiconductor Solutions Corporation
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of Sony Semiconductor Solutions Corporation nor
- *    the names of its contributors may be used to endorse or promote
- *    products derived from this software without specific prior written
- *    permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -649,7 +634,7 @@ bool cxd56_audio_bca_reg_is_dma_fifo_empty(cxd56_audio_dma_t handle)
         break;
 
       default:
-        reg_id = BCA_I2S2_OUT_RTF_TRG;
+        reg_id = BCA_I2S2_OUT_RTD_TRG;
         break;
     }
 
@@ -878,7 +863,7 @@ void cxd56_audio_bca_reg_set_sample_no(cxd56_audio_dma_t handle,
         break;
 
       case CXD56_AUDIO_DMAC_I2S0_DOWN:
-        reg_id = BCA_I2S2_OUT_SAMPLE_NO;
+        reg_id = BCA_I2S1_OUT_SAMPLE_NO;
         break;
 
       default:
@@ -902,11 +887,11 @@ void cxd56_audio_bca_reg_start_dma(cxd56_audio_dma_t handle,
         break;
 
       case CXD56_AUDIO_DMAC_I2S0_DOWN:
-        reg_id = BCA_I2S1_OUT_RTF_TRG;
+        reg_id = BCA_I2S1_OUT_RTD_TRG;
         break;
 
       default:
-        reg_id = BCA_I2S2_OUT_RTF_TRG;
+        reg_id = BCA_I2S2_OUT_RTD_TRG;
         break;
     }
 
@@ -924,11 +909,11 @@ void cxd56_audio_bca_reg_stop_dma(cxd56_audio_dma_t handle)
         break;
 
       case CXD56_AUDIO_DMAC_I2S0_DOWN:
-        reg_id = BCA_I2S1_OUT_RTF_TRG;
+        reg_id = BCA_I2S1_OUT_RTD_TRG;
         break;
 
       default:
-        reg_id = BCA_I2S2_OUT_RTF_TRG;
+        reg_id = BCA_I2S2_OUT_RTD_TRG;
         break;
     }
 
@@ -1152,11 +1137,11 @@ uint32_t cxd56_audio_bca_reg_get_dma_state(cxd56_audio_dma_t handle)
         break;
 
       case CXD56_AUDIO_DMAC_I2S0_DOWN:
-        reg_id = BCA_I2S1_OUT_RTF_TRG;
+        reg_id = BCA_I2S1_OUT_RTD_TRG;
         break;
 
       default:
-        reg_id = BCA_I2S2_OUT_RTF_TRG;
+        reg_id = BCA_I2S2_OUT_RTD_TRG;
         break;
     }
 

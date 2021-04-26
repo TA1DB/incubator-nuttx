@@ -1,35 +1,20 @@
 /****************************************************************************
  * arch/arm/include/cxd56xx/gnss.h
  *
- *   Copyright 2018,2019 Sony Semiconductor Solutions Corporation
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of Sony Semiconductor Solutions Corporation nor
- *    the names of its contributors may be used to endorse or promote
- *    products derived from this software without specific prior written
- *    permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -527,12 +512,47 @@ extern "C"
 
 #define CXD56_GNSS_IOCTL_GET_VAR_EPHEMERIS 49
 
+/* Set usecase mode
+ * This command must be issued in idle mode.
+ *
+ * param[in] arg
+ * The usecase definitions
+ */
+
+#define CXD56_GNSS_IOCTL_SET_USECASE 50
+
+/* Get usecase mode
+ *
+ * param[out] arg
+ * The usecase definitions
+ */
+
+#define CXD56_GNSS_IOCTL_GET_USECASE 51
+
+/* Set enable or disable of 1PPS output
+ * This command must be issued in idle mode.
+ *
+ * param[in] arg
+ * enable(1) or disable(0)
+ */
+
+#define CXD56_GNSS_IOCTL_SET_1PPS_OUTPUT 52
+
+/**
+ * Get the current 1PPS output setting
+ *
+ * @param[out] arg
+ * enable(1) or disable(0)
+ */
+
+#define CXD56_GNSS_IOCTL_GET_1PPS_OUTPUT 53
+
 /* check macros for GNSS commands */
 
 #define CXD56_GNSS_IOCTL_INVAL 0
-#define CXD56_GNSS_IOCTL_MAX   50
+#define CXD56_GNSS_IOCTL_MAX   54
 
-/* Same value to GD Start mode CXD56_GNSS_STMOD_XXXX for GD_Start */
+/* Same value to GD Start mode CXD56_GNSS_STMOD_XXXX for fw_gd_start */
 
 #define CXD56_GNSS_STMOD_COLD       0 /* Cold Start */
 #define CXD56_GNSS_STMOD_WARM       1 /* Warm Start */
@@ -593,6 +613,10 @@ extern "C"
 
 #define CXD56_GNSS_READ_OFFSET_DCREPORT     0x9800
 
+/* Offset for SAR/RLM */
+
+#define CXD56_GNSS_READ_OFFSET_SARRLM       0x9900
+
 /* Offset for Spectrum data */
 
 #define CXD56_GNSS_READ_OFFSET_SPECTRUM     0xa000
@@ -642,6 +666,10 @@ extern "C"
 /* Signal type is QZSS DC report */
 
 #define CXD56_GNSS_SIG_DCREPORT     15
+
+/* Signal type is GAL SAR/RLM */
+
+#define CXD56_GNSS_SIG_SARRLM       16
 
 /****************************************************************************
  * Public Types

@@ -1,5 +1,5 @@
 /****************************************************************************
- * arch/misoc/src/minerva/up_initialstate.c
+ * arch/misoc/src/minerva/minerva_initialstate.c
  *
  *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -75,6 +75,16 @@ void up_initial_state(struct tcb_s *tcb)
   uint32_t regval;
   struct xcptcontext *xcp = &tcb->xcp;
 
+  /* Initialize the idle thread stack */
+
+  if (tcb->pid == 0)
+    {
+      tcb->stack_alloc_ptr = (void *)(g_idle_topstack -
+                                      CONFIG_IDLETHREAD_STACKSIZE);
+      tcb->stack_base_ptr   = tcb->stack_alloc_ptr;
+      tcb->adj_stack_size  = CONFIG_IDLETHREAD_STACKSIZE;
+    }
+
   /* Initialize the initial exception register context structure */
 
   memset(xcp, 0, sizeof(struct xcptcontext));
@@ -85,11 +95,12 @@ void up_initial_state(struct tcb_s *tcb)
    * only the start function would do that and we have control over that one.
    */
 
-  xcp->regs[REG_SP] = (uint32_t) tcb->adj_stack_ptr;
+  xcp->regs[REG_SP] = (uint32_t)tcb->stack_base_ptr +
+                                tcb->adj_stack_size;
 
   /* Save the task entry point */
 
-  xcp->regs[REG_CSR_MEPC] = (uint32_t) tcb->start;
+  xcp->regs[REG_CSR_MEPC] = (uint32_t)tcb->start;
 
   xcp->regs[REG_CSR_MSTATUS] = CSR_MSTATUS_MPIE;
 

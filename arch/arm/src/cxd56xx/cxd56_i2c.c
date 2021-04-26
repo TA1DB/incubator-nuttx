@@ -1,35 +1,20 @@
 /****************************************************************************
  * arch/arm/src/cxd56xx/cxd56_i2c.c
  *
- *   Copyright 2018 Sony Semiconductor Solutions Corporation
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of Sony Semiconductor Solutions Corporation nor
- *    the names of its contributors may be used to endorse or promote
- *    products derived from this software without specific prior written
- *    permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -55,8 +40,8 @@
 #include <arch/board/board.h>
 
 #include "chip.h"
-#include "up_arch.h"
-#include "up_internal.h"
+#include "arm_arch.h"
+#include "arm_internal.h"
 
 #include "cxd56_clock.h"
 #include "cxd56_i2c.h"
@@ -98,7 +83,7 @@ struct cxd56_i2cdev_s
 
   sem_t            mutex;      /* Only one thread can access at a time */
   sem_t            wait;       /* Place to wait for transfer completion */
-  WDOG_ID          timeout;    /* watchdog to timeout when bus hung */
+  struct wdog_s    timeout;    /* watchdog to timeout when bus hung */
   uint32_t         frequency;  /* Current I2C frequency */
   ssize_t          reg_buff_offset;
   ssize_t          rw_size;
@@ -146,6 +131,9 @@ static struct cxd56_i2cdev_s g_i2c2dev =
  * Private Functions
  ****************************************************************************/
 
+static inline int i2c_takesem(FAR sem_t *sem);
+static inline int i2c_givesem(FAR sem_t *sem);
+
 static inline uint32_t i2c_reg_read(struct cxd56_i2cdev_s *priv,
                                     uint32_t offset);
 static inline void i2c_reg_write(struct cxd56_i2cdev_s *priv,
@@ -159,18 +147,36 @@ static int cxd56_i2c_disable(struct cxd56_i2cdev_s *priv);
 static void cxd56_i2c_enable(struct cxd56_i2cdev_s *priv);
 
 static int  cxd56_i2c_interrupt(int irq, FAR void *context, FAR void *arg);
-static void cxd56_i2c_timeout(int argc, uint32_t arg, ...);
+static void cxd56_i2c_timeout(wdparm_t arg);
 static void cxd56_i2c_setfrequency(struct cxd56_i2cdev_s *priv,
                                    uint32_t frequency);
 static int  cxd56_i2c_transfer(FAR struct i2c_master_s *dev,
                                FAR struct i2c_msg_s *msgs, int count);
 #ifdef CONFIG_I2C_RESET
-static int cxd56_i2c_reset(FAR struct i2c_master_s * dev);
+static int cxd56_i2c_reset(FAR struct i2c_master_s *dev);
 #endif
 #if defined(CONFIG_CXD56_I2C0_SCUSEQ) || defined(CONFIG_CXD56_I2C1_SCUSEQ)
 static int  cxd56_i2c_transfer_scu(FAR struct i2c_master_s *dev,
                                    FAR struct i2c_msg_s *msgs, int count);
 #endif
+
+/****************************************************************************
+ * Name: i2c_takesem
+ ****************************************************************************/
+
+static inline int i2c_takesem(FAR sem_t *sem)
+{
+  return nxsem_wait_uninterruptible(sem);
+}
+
+/****************************************************************************
+ * Name: i2c_givesem
+ ****************************************************************************/
+
+static inline int i2c_givesem(FAR sem_t *sem)
+{
+  return nxsem_post(sem);
+}
 
 /****************************************************************************
  * Name: cxd56_i2c_pincontrol
@@ -362,13 +368,13 @@ static void cxd56_i2c_setfrequency(struct cxd56_i2cdev_s *priv,
  *
  ****************************************************************************/
 
-static void cxd56_i2c_timeout(int argc, uint32_t arg, ...)
+static void cxd56_i2c_timeout(wdparm_t arg)
 {
   struct cxd56_i2cdev_s *priv = (struct cxd56_i2cdev_s *)arg;
   irqstate_t flags            = enter_critical_section();
 
   priv->error = -ENODEV;
-  nxsem_post(&priv->wait);
+  i2c_givesem(&priv->wait);
   leave_critical_section(flags);
 }
 
@@ -472,10 +478,10 @@ static int cxd56_i2c_interrupt(int irq, FAR void *context, FAR void *arg)
        * Therefore, call nxsem_post() only when wd_cancel() succeeds.
        */
 
-      ret = wd_cancel(priv->timeout);
+      ret = wd_cancel(&priv->timeout);
       if (ret == OK)
         {
-          nxsem_post(&priv->wait);
+          i2c_givesem(&priv->wait);
         }
     }
 
@@ -529,8 +535,8 @@ static int cxd56_i2c_receive(struct cxd56_i2cdev_s *priv, int last)
         }
 
       flags = enter_critical_section();
-      wd_start(priv->timeout, I2C_TIMEOUT, cxd56_i2c_timeout, 1,
-              (uint32_t)priv);
+      wd_start(&priv->timeout, I2C_TIMEOUT,
+               cxd56_i2c_timeout, (wdparm_t)priv);
 
       /* Set stop flag for indicate the last data */
 
@@ -538,7 +544,7 @@ static int cxd56_i2c_receive(struct cxd56_i2cdev_s *priv, int last)
 
       i2c_reg_rmw(priv, CXD56_IC_INTR_MASK, INTR_RX_FULL, INTR_RX_FULL);
       leave_critical_section(flags);
-      nxsem_wait(&priv->wait);
+      i2c_takesem(&priv->wait);
 
       if (priv->error != OK)
         {
@@ -575,7 +581,8 @@ static int cxd56_i2c_send(struct cxd56_i2cdev_s *priv, int last)
   while (!(i2c_reg_read(priv, CXD56_IC_STATUS) & STATUS_TFNF));
 
   flags = enter_critical_section();
-  wd_start(priv->timeout, I2C_TIMEOUT, cxd56_i2c_timeout, 1, (uint32_t)priv);
+  wd_start(&priv->timeout, I2C_TIMEOUT,
+           cxd56_i2c_timeout, (wdparm_t)priv);
   i2c_reg_write(priv, CXD56_IC_DATA_CMD,
                 (uint32_t)msg->buffer[i] | (last ? CMD_STOP : 0));
 
@@ -584,7 +591,7 @@ static int cxd56_i2c_send(struct cxd56_i2cdev_s *priv, int last)
   i2c_reg_rmw(priv, CXD56_IC_INTR_MASK, INTR_TX_EMPTY, INTR_TX_EMPTY);
   leave_critical_section(flags);
 
-  nxsem_wait(&priv->wait);
+  i2c_takesem(&priv->wait);
 
   return 0;
 }
@@ -613,13 +620,13 @@ static int cxd56_i2c_transfer(FAR struct i2c_master_s *dev,
 
   /* Get exclusive access to the I2C bus */
 
-  nxsem_wait(&priv->mutex);
+  i2c_takesem(&priv->mutex);
 
   /* Check wait semaphore value. If the value is not 0, the transfer can not
    * be performed normally.
    */
 
-  ret = nxsem_getvalue(&priv->wait, &semval);
+  ret = nxsem_get_value(&priv->wait, &semval);
   DEBUGASSERT(ret == OK && semval == 0);
 
   /* Disable clock gating (clock enable) */
@@ -691,7 +698,8 @@ static int cxd56_i2c_transfer(FAR struct i2c_master_s *dev,
 
   cxd56_i2c_clock_gate_enable(priv->port);
 
-  nxsem_post(&priv->mutex);
+  i2c_givesem(&priv->mutex);
+
   return ret;
 }
 
@@ -829,7 +837,7 @@ static int cxd56_i2c_transfer_scu(FAR struct i2c_master_s *dev,
 
   /* Get exclusive access to the I2C bus */
 
-  nxsem_wait(&priv->mutex);
+  i2c_takesem(&priv->mutex);
 
   /* Apply frequency for request msgs */
 
@@ -866,7 +874,7 @@ static int cxd56_i2c_transfer_scu(FAR struct i2c_master_s *dev,
         }
     }
 
-  nxsem_post(&priv->mutex);
+  i2c_givesem(&priv->mutex);
 
   return ret;
 }
@@ -1031,8 +1039,7 @@ struct i2c_master_s *cxd56_i2cbus_initialize(int port)
 
   nxsem_init(&priv->mutex, 0, 1);
   nxsem_init(&priv->wait, 0, 0);
-
-  priv->timeout = wd_create();
+  nxsem_set_protocol(&priv->wait, SEM_PRIO_NONE);
 
   /* Attach Interrupt Handler */
 
@@ -1095,8 +1102,7 @@ int cxd56_i2cbus_uninitialize(FAR struct i2c_master_s *dev)
   up_disable_irq(priv->irqid);
   irq_detach(priv->irqid);
 
-  wd_delete(priv->timeout);
-  priv->timeout = NULL;
+  wd_cancel(&priv->timeout);
   nxsem_destroy(&priv->mutex);
   nxsem_destroy(&priv->wait);
 

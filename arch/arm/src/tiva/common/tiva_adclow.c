@@ -6,11 +6,6 @@
  *   Author: Calvin Maguranis <calvin.maguranis@trd2inc.com>
  *           Gregory Nutt <gnutt@nuttx.org>
  *
- * References:
- *
- *   TM4C123GH6PM Series Data Sheet
- *   TI Tivaware driverlib ADC sample code.
- *
  * The Tivaware sample code has a BSD compatible license that requires this
  * copyright notice:
  *
@@ -46,9 +41,15 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * This is part of revision 2.1.0.12573 of the Tiva Peripheral Driver
- * Library.
  ****************************************************************************/
+
+/* This is part of revision 2.1.0.12573 of the Tiva Peripheral Driver
+ * Library.
+ * References:
+ *
+ *   TM4C123GH6PM Series Data Sheet
+ *   TI Tivaware driverlib ADC sample code.
+ */
 
 /* Keep in mind that for every step there should be another entry in the
  * CONFIG_ADC_FIFOSIZE value.
@@ -79,8 +80,8 @@
 
 #include <arch/board/board.h>
 
-#include "up_arch.h"
-#include "up_internal.h"
+#include "arm_arch.h"
+#include "arm_internal.h"
 #include "tiva_gpio.h"
 #include "tiva_adc.h"
 #include "hardware/tiva_adc.h"
@@ -589,7 +590,9 @@ static int tiva_adc_ioctl(struct adc_dev_s *dev, int cmd, unsigned long arg)
 
           fifo_count = tiva_adc_sse_data(priv->devno, sse, buf);
 
-          /* Verify that the upper-half driver has bound its callback functions */
+          /* Verify that the upper-half driver has bound its callback
+           * functions
+           */
 
           if (priv->cb != NULL)
             {

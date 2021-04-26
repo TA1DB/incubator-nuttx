@@ -1,5 +1,5 @@
 /****************************************************************************
- * boards/arm/stm32/nucleo-f4x1re/src/nucleo-f4x1re.h
+ * boards/arm/stm32/nucleo-f446re/src/nucleo-f446re.h
  *
  *   Copyright (C) 2019 Gregory Nutt. All rights reserved.
  *   Authors: Frank Bennett
@@ -50,7 +50,7 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-/* Configuration ********************************************************************/
+/* Configuration ************************************************************/
 
 #define HAVE_MMCSD 1
 #if !defined(CONFIG_STM32_SDIO) || !defined(CONFIG_MMCSD) || \
@@ -58,9 +58,11 @@
 #  undef HAVE_MMCSD
 #endif
 
-/* LED.  User LD2: the green LED is a user LED connected to Arduino signal D13
- * corresponding to MCU I/O PA5 (pin 21) or PB13 (pin 34) depending on the STM32
- * target.
+#define HAVE_LCD 1
+
+/* LED.  User LD2: the green LED is a user LED connected to Arduino signal
+ * D13 corresponding to MCU I/O PA5 (pin 21) or PB13 (pin 34) depending on
+ * the STM32 target.
  *
  * - When the I/O is HIGH value, the LED is on.
  * - When the I/O is LOW, the LED is off.
@@ -123,6 +125,15 @@
 #  define GPIO_SPI_CS_SD_CARD \
     (GPIO_OUTPUT | GPIO_PUSHPULL | GPIO_SPEED_2MHz | \
      GPIO_OUTPUT_SET | GPIO_PORTB | GPIO_PIN5)
+#endif
+
+#ifdef HAVE_LCD
+#define GPIO_LCD_CS  (GPIO_OUTPUT | GPIO_PUSHPULL | GPIO_SPEED_2MHz | \
+                      GPIO_OUTPUT_SET | GPIO_PORTA | GPIO_PIN9)
+#define GPIO_LCD_RST (GPIO_OUTPUT | GPIO_PUSHPULL | GPIO_SPEED_2MHz | \
+                      GPIO_OUTPUT_SET | GPIO_PORTB | GPIO_PIN10)
+#define GPIO_LCD_RS  (GPIO_OUTPUT | GPIO_PUSHPULL | GPIO_SPEED_2MHz | \
+                      GPIO_OUTPUT_SET | GPIO_PORTA | GPIO_PIN8)
 #endif
 
 /* Devices on the onboard bus.
@@ -220,13 +231,36 @@ extern struct spi_dev_s *g_spi1;
 #ifdef CONFIG_STM32_SPI2
 extern struct spi_dev_s *g_spi2;
 #endif
+#ifdef CONFIG_STM32_SPI3
+extern struct spi_dev_s *g_spi3;
+#endif
 #ifdef HAVE_MMCSD
 extern struct sdio_dev_s *g_sdio;
 #endif
 
 /****************************************************************************
- * Public Functions
+ * Public Function Prototypes
  ****************************************************************************/
+
+/****************************************************************************
+ * Name: stm32_bringup
+ *
+ * Description:
+ *   Perform architecture specific initialization
+ *
+ *   CONFIG_LIB_BOARDCTL=y:
+ *     If CONFIG_NSH_ARCHINITIALIZE=y:
+ *       Called from the NSH library (or other application)
+ *     Otherwise, assumed to be called from some other application.
+ *
+ *   Otherwise CONFIG_BOARD_LATE_INITIALIZE=y:
+ *     Called from board_late_initialize().
+ *
+ *   Otherwise, bad news:  Never called
+ *
+ ****************************************************************************/
+
+int stm32_bringup(void);
 
 /****************************************************************************
  * Name: stm32_spidev_initialize
@@ -261,15 +295,15 @@ int stm32_adc_setup(void);
 #endif
 
 /****************************************************************************
- * Name: stm32_qencoder_initialize
+ * Name: stm32_can_setup
  *
  * Description:
- *   Initialize and register a qencoder
+ *  Initialize CAN and register the CAN device
  *
  ****************************************************************************/
 
-#ifdef CONFIG_SENSORS_QENCODER
-int stm32_qencoder_initialize(FAR const char *devpath, int timer);
+#ifdef CONFIG_CAN
+int stm32_can_setup(void);
 #endif
 
 /****************************************************************************
@@ -280,8 +314,20 @@ int stm32_qencoder_initialize(FAR const char *devpath, int timer);
  *
  ****************************************************************************/
 
-#ifdef CONFIG_AJOYSTICK
+#ifdef CONFIG_INPUT_AJOYSTICK
 int board_ajoy_initialize(void);
+#endif
+
+/****************************************************************************
+ * Name: stm32_foc_setup
+ *
+ * Description:
+ *  Initialize FOC peripheral for the board.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_STM32_FOC
+int stm32_foc_setup(void);
 #endif
 
 #endif /* __BOARDS_ARM_STM32_NUCLEO_F401RE_SRC_NUCLEO_F446RE_H */

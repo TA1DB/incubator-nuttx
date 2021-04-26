@@ -1,35 +1,20 @@
 /****************************************************************************
  * net/tcp/tcp_recvfrom.c
  *
- *   Copyright (C) 2020 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -249,7 +234,8 @@ static inline void tcp_newdata(FAR struct net_driver_s *dev,
 
 static inline void tcp_readahead(struct tcp_recvfrom_s *pstate)
 {
-  FAR struct tcp_conn_s *conn = (FAR struct tcp_conn_s *)pstate->ir_sock->s_conn;
+  FAR struct tcp_conn_s *conn =
+    (FAR struct tcp_conn_s *)pstate->ir_sock->s_conn;
   FAR struct iob_s *iob;
   int recvlen;
 
@@ -379,7 +365,7 @@ static inline void tcp_sender(FAR struct net_driver_s *dev,
 }
 
 /****************************************************************************
- * Name: tcp_eventhandler
+ * Name: tcp_recvhandler
  *
  * Description:
  *   This function is called with the network locked to perform the actual
@@ -398,9 +384,9 @@ static inline void tcp_sender(FAR struct net_driver_s *dev,
  *
  ****************************************************************************/
 
-static uint16_t tcp_eventhandler(FAR struct net_driver_s *dev,
-                                 FAR void *pvconn, FAR void *pvpriv,
-                                 uint16_t flags)
+static uint16_t tcp_recvhandler(FAR struct net_driver_s *dev,
+                                FAR void *pvconn, FAR void *pvpriv,
+                                uint16_t flags)
 {
   FAR struct tcp_recvfrom_s *pstate = (struct tcp_recvfrom_s *)pvpriv;
 
@@ -525,6 +511,53 @@ static uint16_t tcp_eventhandler(FAR struct net_driver_s *dev,
 }
 
 /****************************************************************************
+ * Name: tcp_ackhandler
+ *
+ * Description:
+ *   This function is called with the network locked to send the ACK in
+ *   response by the lower, device interfacing layer.
+ *
+ * Input Parameters:
+ *   dev      The structure of the network driver that generated the event.
+ *   pvconn   The connection structure associated with the socket
+ *   flags    Set of events describing why the callback was invoked
+ *
+ * Returned Value:
+ *   ACK should be send in the response.
+ *
+ * Assumptions:
+ *   The network is locked.
+ *
+ ****************************************************************************/
+
+static uint16_t tcp_ackhandler(FAR struct net_driver_s *dev,
+                               FAR void *pvconn, FAR void *pvpriv,
+                               uint16_t flags)
+{
+  FAR struct tcp_conn_s *conn = (FAR struct tcp_conn_s *)pvconn;
+
+  ninfo("flags: %04x\n", flags);
+
+  if (conn != NULL && (flags & TCP_POLL) != 0)
+    {
+      /* Indicate that the data has been consumed and that an ACK
+       * should be send.
+       */
+
+      if (tcp_get_recvwindow(dev, conn) != 0 &&
+          conn->rcv_wnd == 0)
+        {
+          flags |= TCP_SNDACK;
+        }
+
+      tcp_callback_free(conn, conn->rcv_ackcb);
+      conn->rcv_ackcb = NULL;
+    }
+
+  return flags;
+}
+
+/****************************************************************************
  * Name: tcp_recvfrom_initialize
  *
  * Description:
@@ -557,7 +590,7 @@ static void tcp_recvfrom_initialize(FAR struct socket *psock, FAR void *buf,
    */
 
   nxsem_init(&pstate->ir_sem, 0, 0); /* Doesn't really fail */
-  nxsem_setprotocol(&pstate->ir_sem, SEM_PRIO_NONE);
+  nxsem_set_protocol(&pstate->ir_sem, SEM_PRIO_NONE);
 
   pstate->ir_buflen    = len;
   pstate->ir_buffer    = buf;
@@ -607,8 +640,9 @@ static ssize_t tcp_recvfrom_result(int result, struct tcp_recvfrom_s *pstate)
       return pstate->ir_result;
     }
 
-  /* If net_timedwait failed, then we were probably reawakened by a signal. In
-   * this case, net_timedwait will have returned negated errno appropriately.
+  /* If net_timedwait failed, then we were probably reawakened by a signal.
+   * In this case, net_timedwait will have returned negated errno
+   * appropriately.
    */
 
   if (result < 0)
@@ -649,14 +683,18 @@ ssize_t psock_tcp_recvfrom(FAR struct socket *psock, FAR void *buf,
                            size_t len, int flags, FAR struct sockaddr *from,
                            FAR socklen_t *fromlen)
 {
-  struct tcp_recvfrom_s state;
-  int               ret;
+  struct tcp_recvfrom_s  state;
+  FAR struct tcp_conn_s *conn;
+  int                    ret;
+
+  net_lock();
+
+  conn = (FAR struct tcp_conn_s *)psock->s_conn;
 
   /* Initialize the state structure.  This is done with the network locked
    * because we don't want anything to happen until we are ready.
    */
 
-  net_lock();
   tcp_recvfrom_initialize(psock, buf, len, from, fromlen, &state);
 
   /* Handle any any TCP data already buffered in a read-ahead buffer.  NOTE
@@ -683,15 +721,15 @@ ssize_t psock_tcp_recvfrom(FAR struct socket *psock, FAR void *buf,
        * will wait to return end disconnection indications the next time that
        * recvfrom() is called.
        *
-       * If no data was received (i.e.,  ret == 0  -- it will not be negative)
-       * and the connection was gracefully closed by the remote peer, then return
-       * success.  If ir_recvlen is zero, the caller of recvfrom() will get an
-       * end-of-file indication.
+       * If no data was received (i.e.,  ret == 0  -- it will not be
+       * negative) and the connection was gracefully closed by the remote
+       * peer, then return success.  If ir_recvlen is zero, the caller of
+       * recvfrom() will get an end-of-file indication.
        */
 
       if (ret <= 0 && !_SS_ISCLOSED(psock->s_flags))
         {
-          /* Nothing was previously received from the readahead buffers.
+          /* Nothing was previously received from the read-ahead buffers.
            * The SOCK_STREAM must be (re-)connected in order to receive any
            * additional data.
            */
@@ -701,9 +739,9 @@ ssize_t psock_tcp_recvfrom(FAR struct socket *psock, FAR void *buf,
     }
 
   /* In general, this implementation will not support non-blocking socket
-   * operations... except in a few cases:  Here for TCP receive with read-ahead
-   * enabled.  If this socket is configured as non-blocking then return EAGAIN
-   * if no data was obtained from the read-ahead buffers.
+   * operations... except in a few cases:  Here for TCP receive with read-
+   * ahead enabled.  If this socket is configured as non-blocking then
+   * return EAGAIN if no data was obtained from the read-ahead buffers.
    */
 
   else if (_SS_ISNONBLOCK(psock->s_flags) || (flags & MSG_DONTWAIT) != 0)
@@ -720,15 +758,15 @@ ssize_t psock_tcp_recvfrom(FAR struct socket *psock, FAR void *buf,
         }
     }
 
-  /* It is okay to block if we need to.  If there is space to receive anything
-   * more, then we will wait to receive the data.  Otherwise return the number
-   * of bytes read from the read-ahead buffer (already in 'ret').
+  /* It is okay to block if we need to.  If there is space to receive
+   * anything more, then we will wait to receive the data.  Otherwise return
+   * the number of bytes read from the read-ahead buffer (already in 'ret').
    */
 
   else
 
-  /* We get here when we we decide that we need to setup the wait for incoming
-   * TCP/IP data.  Just a few more conditions to check:
+  /* We get here when we we decide that we need to setup the wait for
+   * incoming TCP/IP data.  Just a few more conditions to check:
    *
    * 1) Make sure thet there is buffer space to receive additional data
    *    (state.ir_buflen > 0).  This could be zero, for example,  we filled
@@ -740,8 +778,6 @@ ssize_t psock_tcp_recvfrom(FAR struct socket *psock, FAR void *buf,
 
   if (state.ir_recvlen == 0 && state.ir_buflen > 0)
     {
-      FAR struct tcp_conn_s *conn = (FAR struct tcp_conn_s *)psock->s_conn;
-
       /* Set up the callback in the connection */
 
       state.ir_cb = tcp_callback_alloc(conn);
@@ -749,7 +785,7 @@ ssize_t psock_tcp_recvfrom(FAR struct socket *psock, FAR void *buf,
         {
           state.ir_cb->flags   = (TCP_NEWDATA | TCP_DISCONN_EVENTS);
           state.ir_cb->priv    = (FAR void *)&state;
-          state.ir_cb->event   = tcp_eventhandler;
+          state.ir_cb->event   = tcp_recvhandler;
 
           /* Wait for either the receive to complete or for an error/timeout
            * to occur.  net_timedwait will also terminate if a signal isi
@@ -770,6 +806,19 @@ ssize_t psock_tcp_recvfrom(FAR struct socket *psock, FAR void *buf,
       else
         {
           ret = -EBUSY;
+        }
+    }
+
+  /* Receive additional data from read-ahead buffer, send the ACK timely. */
+
+  if (conn->rcv_wnd == 0 && conn->rcv_ackcb == NULL)
+    {
+      conn->rcv_ackcb = tcp_callback_alloc(conn);
+      if (conn->rcv_ackcb)
+        {
+          conn->rcv_ackcb->flags   = TCP_POLL;
+          conn->rcv_ackcb->event   = tcp_ackhandler;
+          netdev_txnotify_dev(conn->dev);
         }
     }
 

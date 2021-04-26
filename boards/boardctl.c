@@ -152,7 +152,6 @@ static inline int
             case BOARDIOC_USBDEV_CONNECT:    /* Connect the USB MSC device */
               {
                 DEBUGASSERT(ctrl->handle != NULL);
-#warning Missing logic
                 ret = -ENOSYS;
               }
               break;
@@ -257,6 +256,14 @@ static inline int boardctl_pmctrl(FAR struct boardioc_pm_ctrl_s *ctrl)
 
       case BOARDIOC_PM_QUERYSTATE:
         ctrl->state = pm_querystate(ctrl->domain);
+        break;
+
+      case BOARDIOC_PM_CHANGESTATE:
+        ret = pm_changestate(ctrl->domain, ctrl->state);
+        break;
+
+      case BOARDIOC_PM_CHECKSTATE:
+        ctrl->state = pm_checkstate(ctrl->domain);
         break;
 
       default:

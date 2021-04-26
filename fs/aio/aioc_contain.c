@@ -59,51 +59,22 @@
 FAR struct aio_container_s *aio_contain(FAR struct aiocb *aiocbp)
 {
   FAR struct aio_container_s *aioc;
-  union
-  {
-    FAR struct file *filep;
-#ifdef AIO_HAVE_PSOCK
-    FAR struct socket *psock;
-#endif
-    FAR void *ptr;
-  } u;
+  FAR struct file *filep;
 
 #ifdef CONFIG_PRIORITY_INHERITANCE
   struct sched_param param;
 #endif
   int ret;
 
-#ifdef AIO_HAVE_PSOCK
-  if (aiocbp->aio_fildes < CONFIG_NFILE_DESCRIPTORS)
-#endif
+  /* Get the file structure corresponding to the file descriptor. */
+
+  ret = fs_getfilep(aiocbp->aio_fildes, &filep);
+  if (ret < 0)
     {
-      /* Get the file structure corresponding to the file descriptor. */
-
-      ret = fs_getfilep(aiocbp->aio_fildes, &u.filep);
-      if (ret < 0)
-        {
-          goto errout;
-        }
-
-      DEBUGASSERT(u.filep != NULL);
+      goto errout;
     }
-#ifdef AIO_HAVE_PSOCK
-  else
-    {
-      /* Get the socket structure corresponding to the socket descriptor */
 
-      u.psock = sockfd_socket(aiocbp->aio_fildes);
-      if (u.psock == NULL)
-        {
-          /* Does not return error information.  EBADF is the most likely
-           * explanation.
-           */
-
-          ret = -EBADF;
-          goto errout;
-        }
-    }
-#endif
+  DEBUGASSERT(filep != NULL);
 
   /* Allocate the AIO control block container, waiting for one to become
    * available if necessary.  This should not fail except for in the case
@@ -117,11 +88,11 @@ FAR struct aio_container_s *aio_contain(FAR struct aiocb *aiocbp)
 
       memset(aioc, 0, sizeof(struct aio_container_s));
       aioc->aioc_aiocbp = aiocbp;
-      aioc->u.ptr       = u.ptr;
+      aioc->aioc_filep  = filep;
       aioc->aioc_pid    = getpid();
 
 #ifdef CONFIG_PRIORITY_INHERITANCE
-      DEBUGVERIFY(nxsched_getparam (aioc->aioc_pid, &param));
+      DEBUGVERIFY(nxsched_get_param (aioc->aioc_pid, &param));
       aioc->aioc_prio   = param.sched_priority;
 #endif
 
@@ -174,7 +145,9 @@ FAR struct aiocb *aioc_decant(FAR struct aio_container_s *aioc)
     {
       dq_rem(&aioc->aioc_link, &g_aio_pending);
 
-      /* De-cant the AIO control block and return the container to the free list */
+      /* De-cant the AIO control block and return the container to the
+       * free list.
+       */
 
       aiocbp = aioc->aioc_aiocbp;
       aioc_free(aioc);

@@ -1,5 +1,5 @@
 /****************************************************************************
- * arch/misoc/src/lm32/up_initialstate.c
+ * arch/misoc/src/lm32/lm32_initialstate.c
  *
  *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -50,18 +50,6 @@
 #include "lm32.h"
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -83,6 +71,16 @@ void up_initial_state(struct tcb_s *tcb)
 {
   struct xcptcontext *xcp = &tcb->xcp;
 
+  /* Initialize the idle thread stack */
+
+  if (tcb->pid == 0)
+    {
+      tcb->stack_alloc_ptr = (void *)(g_idle_topstack -
+                                      CONFIG_IDLETHREAD_STACKSIZE);
+      tcb->stack_base_ptr   = tcb->stack_alloc_ptr;
+      tcb->adj_stack_size  = CONFIG_IDLETHREAD_STACKSIZE;
+    }
+
   /* Initialize the initial exception register context structure */
 
   memset(xcp, 0, sizeof(struct xcptcontext));
@@ -93,7 +91,8 @@ void up_initial_state(struct tcb_s *tcb)
    * only the start function would do that and we have control over that one
    */
 
-  xcp->regs[REG_SP]      = (uint32_t)tcb->adj_stack_ptr;
+  xcp->regs[REG_SP]      = (uint32_t)tcb->stack_base_ptr +
+                                     tcb->adj_stack_size;
 
   /* Save the task entry point */
 

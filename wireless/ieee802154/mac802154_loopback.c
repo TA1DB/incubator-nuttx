@@ -1,35 +1,20 @@
 /****************************************************************************
- * wireless/iee802154/mac802154_loopback.c
+ * wireless/ieee802154/mac802154_loopback.c
  *
- *   Copyright (C) 2017-2018 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -123,7 +108,7 @@ struct lo_driver_s
   bool lo_bifup;               /* true:ifup false:ifdown */
   bool lo_pending;             /* True: TX poll pending */
   uint8_t lo_panid[2];         /* Fake PAN ID for testing */
-  WDOG_ID lo_polldog;          /* TX poll timer */
+  struct wdog_s lo_polldog;    /* TX poll timer */
   struct work_s lo_work;       /* For deferring poll work to the work queue */
   FAR struct iob_s *lo_head;   /* Head of IOBs queued for loopback */
   FAR struct iob_s *lo_tail;   /* Tail of IOBs queued for loopback */
@@ -171,7 +156,7 @@ static inline void lo_netmask(FAR struct net_driver_s *dev);
 static int  lo_loopback(FAR struct net_driver_s *dev);
 static void lo_loopback_work(FAR void *arg);
 static void lo_poll_work(FAR void *arg);
-static void lo_poll_expiry(int argc, wdparm_t arg, ...);
+static void lo_poll_expiry(wdparm_t arg);
 
 /* NuttX callback functions */
 
@@ -491,7 +476,7 @@ static void lo_poll_work(FAR void *arg)
 
   /* Setup the watchdog poll timer again */
 
-  wd_start(priv->lo_polldog, LO_WDDELAY, lo_poll_expiry, 1, priv);
+  wd_start(&priv->lo_polldog, LO_WDDELAY, lo_poll_expiry, (wdparm_t)priv);
   net_unlock();
 }
 
@@ -502,8 +487,7 @@ static void lo_poll_work(FAR void *arg)
  *   Periodic timer handler.  Called from the timer interrupt handler.
  *
  * Input Parameters:
- *   argc - The number of available arguments
- *   arg  - The first argument
+ *   arg  - The argument
  *
  * Returned Value:
  *   None
@@ -513,7 +497,7 @@ static void lo_poll_work(FAR void *arg)
  *
  ****************************************************************************/
 
-static void lo_poll_expiry(int argc, wdparm_t arg, ...)
+static void lo_poll_expiry(wdparm_t arg)
 {
   FAR struct lo_driver_s *priv = (FAR struct lo_driver_s *)arg;
 
@@ -594,8 +578,8 @@ static int lo_ifup(FAR struct net_driver_s *dev)
 
   /* Set and activate a timer process */
 
-  wd_start(priv->lo_polldog, LO_WDDELAY, lo_poll_expiry,
-           1, (wdparm_t)priv);
+  wd_start(&priv->lo_polldog, LO_WDDELAY,
+           lo_poll_expiry, (wdparm_t)priv);
 
   priv->lo_bifup = true;
   return OK;
@@ -625,7 +609,7 @@ static int lo_ifdown(FAR struct net_driver_s *dev)
 
   /* Cancel the TX poll timer and TX timeout timers */
 
-  wd_cancel(priv->lo_polldog);
+  wd_cancel(&priv->lo_polldog);
 
   /* Mark the device "down" */
 
@@ -1102,7 +1086,7 @@ int ieee8021514_loopback(void)
 #ifdef CONFIG_NETDEV_IOCTL
   dev->d_ioctl        = lo_ioctl;         /* Handle network IOCTL commands */
 #endif
-  dev->d_private      = (FAR void *)priv; /* Used to recover private state from dev */
+  dev->d_private      = priv;             /* Used to recover private state from dev */
 
   /* Set the network mask and advertise our MAC-based IP address */
 
@@ -1114,10 +1098,6 @@ int ieee8021514_loopback(void)
   radio->r_get_mhrlen = lo_get_mhrlen;    /* Get MAC header length */
   radio->r_req_data   = lo_req_data;      /* Enqueue frame for transmission */
   radio->r_properties = lo_properties;    /* Returns radio properties */
-
-  /* Create a watchdog for timing polling for and timing of transmissions */
-
-  priv->lo_polldog    = wd_create();      /* Create periodic poll timer */
 
 #ifdef CONFIG_NET_6LOWPAN
   /* Make sure the our single packet buffer is attached.

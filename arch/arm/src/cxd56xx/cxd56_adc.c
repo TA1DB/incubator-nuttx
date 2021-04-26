@@ -1,35 +1,20 @@
 /****************************************************************************
  * arch/arm/src/cxd56xx/cxd56_adc.c
  *
- *   Copyright 2018 Sony Semiconductor Solutions Corporation
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of Sony Semiconductor Solutions Corporation nor
- *    the names of its contributors may be used to endorse or promote
- *    products derived from this software without specific prior written
- *    permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -54,7 +39,7 @@
 #include <arch/chip/adc.h>
 
 #include "chip.h"
-#include "up_arch.h"
+#include "arm_arch.h"
 #include "hardware/cxd56_adc.h"
 #include "hardware/cxd56_scuseq.h"
 #include "cxd56_clock.h"
@@ -123,6 +108,40 @@
 
 #define ADC_BYTESPERSAMPLE   2
 #define ADC_ELEMENTSIZE      0
+
+/* Input Gain setting */
+
+#define INPUT_GAIN(a, g1, g2) (((a) << 24) | ((g2) << 16) | ((g1) << 12))
+#define INPUT_GAIN_MASK         INPUT_GAIN(3, 15, 15)
+#define INPUT_GAIN_MINUS_6DB    INPUT_GAIN(2, 0, 0)
+#define INPUT_GAIN_THROUGH      INPUT_GAIN(0, 0, 0)
+#define INPUT_GAIN_PLUS_6DB     INPUT_GAIN(0, 4, 0)
+#define INPUT_GAIN_PLUS_12DB    INPUT_GAIN(0, 12, 0)
+#define INPUT_GAIN_PLUS_14DB    INPUT_GAIN(0, 4, 8)
+
+#if defined(CONFIG_CXD56_HPADC0_INPUT_GAIN_M6DB)
+#define HPADC0_INPUT_GAIN       INPUT_GAIN_MINUS_6DB
+#elif defined(CONFIG_CXD56_HPADC0_INPUT_GAIN_6DB)
+#define HPADC0_INPUT_GAIN       INPUT_GAIN_PLUS_6DB
+#elif defined(CONFIG_CXD56_HPADC0_INPUT_GAIN_12DB)
+#define HPADC0_INPUT_GAIN       INPUT_GAIN_PLUS_12DB
+#elif defined(CONFIG_CXD56_HPADC0_INPUT_GAIN_14DB)
+#define HPADC0_INPUT_GAIN       INPUT_GAIN_PLUS_14DB
+#else
+#define HPADC0_INPUT_GAIN       INPUT_GAIN_THROUGH
+#endif
+
+#if defined(CONFIG_CXD56_HPADC1_INPUT_GAIN_M6DB)
+#define HPADC1_INPUT_GAIN       INPUT_GAIN_MINUS_6DB
+#elif defined(CONFIG_CXD56_HPADC1_INPUT_GAIN_6DB)
+#define HPADC1_INPUT_GAIN       INPUT_GAIN_PLUS_6DB
+#elif defined(CONFIG_CXD56_HPADC1_INPUT_GAIN_12DB)
+#define HPADC1_INPUT_GAIN       INPUT_GAIN_PLUS_12DB
+#elif defined(CONFIG_CXD56_HPADC1_INPUT_GAIN_14DB)
+#define HPADC1_INPUT_GAIN       INPUT_GAIN_PLUS_14DB
+#else
+#define HPADC1_INPUT_GAIN       INPUT_GAIN_THROUGH
+#endif
 
 typedef enum adc_ch
 {
@@ -523,6 +542,15 @@ static int adc_start(adc_ch_t ch, uint8_t freq, FAR struct seq_s *seq,
                            (uint32_t *)SCUADCIF_HPADC1_A2;
       putreg32(1, addr);
 
+      /* HPADC.A3 */
+
+      addr = (ch == CH4) ? (uint32_t *)SCUADCIF_HPADC0_A3 :
+                           (uint32_t *)SCUADCIF_HPADC1_A3;
+
+      val = getreg32(addr) & ~INPUT_GAIN_MASK;
+      val |= (ch == CH4) ? HPADC0_INPUT_GAIN : HPADC1_INPUT_GAIN;
+      putreg32(val, addr);
+
       /* HPADC.D0 */
 
       addr = (ch == CH4) ? (uint32_t *)SCUADCIF_HPADC0_D0 :
@@ -869,7 +897,7 @@ static int cxd56_adc_ioctl(FAR struct file *filep, int cmd,
           else
             {
               aerr("Unrecognized cmd: %d\n", cmd);
-              ret = -EINVAL;
+              ret = -ENOTTY;
             }
         }
         break;

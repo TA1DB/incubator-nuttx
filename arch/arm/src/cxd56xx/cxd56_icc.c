@@ -1,35 +1,20 @@
 /****************************************************************************
  * arch/arm/src/cxd56xx/cxd56_icc.c
  *
- *   Copyright 2018 Sony Semiconductor Solutions Corporation
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of Sony Semiconductor Solutions Corporation nor
- *    the names of its contributors may be used to endorse or promote
- *    products derived from this software without specific prior written
- *    permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -42,6 +27,7 @@
 #include <nuttx/kmalloc.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/irq.h>
+#include <nuttx/signal.h>
 #include <nuttx/semaphore.h>
 
 #include <queue.h>
@@ -51,7 +37,7 @@
 #include <debug.h>
 #include <errno.h>
 
-#include "up_arch.h"
+#include "arm_arch.h"
 #include "chip.h"
 #include "cxd56_cpufifo.h"
 #include "cxd56_icc.h"
@@ -122,7 +108,7 @@ struct iccdev_s
 
   FAR void *userdata;
   sem_t rxwait;
-  WDOG_ID rxtimeout;
+  struct wdog_s rxtimeout;
 
   int flags;
 
@@ -161,6 +147,11 @@ static struct iccdev_s *g_cpumsg[NCPUS];
 static int icc_semtake(sem_t *semid)
 {
   return nxsem_wait_uninterruptible(semid);
+}
+
+static int icc_semtrytake(sem_t *semid)
+{
+  return nxsem_trywait(semid);
 }
 
 static void icc_semgive(sem_t *semid)
@@ -254,7 +245,7 @@ static int icc_irqhandler(int cpuid, uint32_t word[2])
       union sigval value;
 
       value.sival_ptr = priv->sigdata;
-      sigqueue(priv->pid, priv->signo, value);
+      nxsig_queue(priv->pid, priv->signo, value);
     }
 #endif
 
@@ -302,7 +293,7 @@ static int icc_msghandler(int cpuid, int protoid, uint32_t pdata,
   return -1;
 }
 
-static void icc_rxtimeout(int argc, uint32_t arg, ...)
+static void icc_rxtimeout(wdparm_t arg)
 {
   FAR struct iccdev_s *priv = (FAR struct iccdev_s *)arg;
   icc_semgive(&priv->rxwait);
@@ -314,20 +305,30 @@ static int icc_recv(FAR struct iccdev_s *priv, FAR iccmsg_t *msg, int32_t ms)
   irqstate_t flags;
   int ret = OK;
 
-  if (ms)
+  if (ms == -1)
+    {
+      /* Try to take the semaphore without waiging. */
+
+      ret = icc_semtrytake(&priv->rxwait);
+      if (ret < 0)
+        {
+          return ret;
+        }
+    }
+  else if (ms == 0)
+    {
+      icc_semtake(&priv->rxwait);
+    }
+  else
     {
       int32_t timo;
       timo = ms * 1000 / CONFIG_USEC_PER_TICK;
-      wd_start(priv->rxtimeout, timo, icc_rxtimeout, 1, (uint32_t)priv);
-    }
+      wd_start(&priv->rxtimeout, timo, icc_rxtimeout, (wdparm_t)priv);
 
-  ret = icc_semtake(&priv->rxwait);
-  if (ret < 0)
-    {
-      return ret;
-    }
+      icc_semtake(&priv->rxwait);
 
-  wd_cancel(priv->rxtimeout);
+      wd_cancel(&priv->rxtimeout);
+    }
 
   flags = enter_critical_section();
   req   = (FAR struct iccreq_s *)sq_remfirst(&priv->recvq);
@@ -363,9 +364,8 @@ static FAR struct iccdev_s *icc_devnew(void)
 
   memset(priv, 0, sizeof(struct iccdev_s));
 
-  priv->rxtimeout = wd_create();
-
   nxsem_init(&priv->rxwait, 0, 0);
+  nxsem_set_protocol(&priv->rxwait, SEM_PRIO_NONE);
 
   /* Initialize receive queue and free list */
 
@@ -384,7 +384,7 @@ static FAR struct iccdev_s *icc_devnew(void)
 
 static void icc_devfree(FAR struct iccdev_s *priv)
 {
-  wd_delete(priv->rxtimeout);
+  wd_cancel(&priv->rxtimeout);
   kmm_free(priv);
 }
 

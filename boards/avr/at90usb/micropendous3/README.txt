@@ -241,9 +241,9 @@ Linux:
   After configuring NuttX, make sure that CONFIG_AVR_LINUXGCC_TOOLCHAIN=y is set in your
   .config file.
 
-Mac OS X:
+macOS:
 
-  For Mac OS X, the CrossPack for AVR toolchain is available from:
+  For macOS, the CrossPack for AVR toolchain is available from:
 
     http://www.obdev.at/products/crosspack/index.html
 
@@ -262,7 +262,7 @@ Windows Native Toolchains
      out 'cygpath -w'
 
   2. Windows toolchains cannot follow Cygwin symbolic links.  Many symbolic
-     links are used in Nuttx (e.g., include/arch).  The make system works
+     links are used in NuttX (e.g., include/arch).  The make system works
      around these  problems for the Windows tools by copying directories
      instead of linking them.  But this can also cause some confusion for
      you:  For example, you may edit a file in a "linked" directory and find
@@ -285,7 +285,7 @@ NuttX buildroot Toolchain
   NuttX Bitbucket download site (https://bitbucket.org/nuttx/nuttx/downloads/).
   This GNU toolchain builds and executes in the Linux or Cygwin environment.
 
-  1. You must have already configured Nuttx in <some-dir>/nuttx.
+  1. You must have already configured NuttX in <some-dir>/nuttx.
 
      tools/configure.sh micropendous3:<sub-dir>
 

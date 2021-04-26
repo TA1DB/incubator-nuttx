@@ -1,35 +1,20 @@
 /****************************************************************************
- * control/lib_observer.c
+ * libs/libdsp/lib_observer.c
  *
- *   Copyright (C) 2018 Gregory Nutt. All rights reserved.
- *   Author: Mateusz Szafoni <raiden00@railab.me>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -66,17 +51,17 @@
  *
  ****************************************************************************/
 
-void motor_observer_init(FAR struct motor_observer_s *observer,
+void motor_observer_init(FAR struct motor_observer_f32_s *observer,
                          FAR void *ao, FAR void *so, float per)
 {
-  DEBUGASSERT(observer != NULL);
-  DEBUGASSERT(ao != NULL);
-  DEBUGASSERT(so != NULL);
-  DEBUGASSERT(per > 0.0f);
+  LIBDSP_DEBUGASSERT(observer != NULL);
+  LIBDSP_DEBUGASSERT(ao != NULL);
+  LIBDSP_DEBUGASSERT(so != NULL);
+  LIBDSP_DEBUGASSERT(per > 0.0f);
 
   /* Reset observer data */
 
-  memset(observer, 0, sizeof(struct motor_observer_s));
+  memset(observer, 0, sizeof(struct motor_observer_f32_s));
 
   /* Set observer period */
 
@@ -107,22 +92,25 @@ void motor_observer_init(FAR struct motor_observer_s *observer,
  *
  ****************************************************************************/
 
-void motor_observer_smo_init(FAR struct motor_observer_smo_s *smo,
-                             float kslide,
-                             float err_max)
+void motor_observer_smo_init(FAR struct motor_observer_smo_f32_s *smo,
+                             float kslide, float err_max)
 {
-  DEBUGASSERT(smo != NULL);
-  DEBUGASSERT(kslide > 0.0f);
-  DEBUGASSERT(err_max > 0.0f);
+  LIBDSP_DEBUGASSERT(smo != NULL);
+  LIBDSP_DEBUGASSERT(kslide > 0.0f);
+  LIBDSP_DEBUGASSERT(err_max > 0.0f);
 
   /* Reset structure */
 
-  memset(smo, 0, sizeof(struct motor_observer_smo_s));
+  memset(smo, 0, sizeof(struct motor_observer_smo_f32_s));
 
   /* Initialize structure */
 
   smo->k_slide = kslide;
   smo->err_max = err_max;
+
+  /* Store inverted err_max to avoid division */
+
+  smo->one_by_err_max = (1.0f / err_max);
 }
 
 /****************************************************************************
@@ -175,37 +163,40 @@ void motor_observer_smo_init(FAR struct motor_observer_smo_s *smo,
  *   i_ab   - (in) inverter alpha-beta current
  *   v_ab   - (in) inverter alpha-beta voltage
  *   phy    - (in) pointer to the motor physical parameters
- *   dir    - (in) rotation direction (1.0 for CW, -1.0 for CCW)
+ *   dir    - (in) rotation direction (1.0 for CCW, -1.0 for CW)
+ *            NOTE: (mechanical dir) = -(electrical dir)
  *
  * Returned Value:
  *   None
  *
  ****************************************************************************/
 
-void motor_observer_smo(FAR struct motor_observer_s *o, FAR ab_frame_t *i_ab,
-                        FAR ab_frame_t *v_ab,
-                        FAR struct motor_phy_params_s *phy, float dir)
+void motor_observer_smo(FAR struct motor_observer_f32_s *o,
+                        FAR ab_frame_f32_t *i_ab, FAR ab_frame_f32_t *v_ab,
+                        FAR struct motor_phy_params_f32_s *phy, float dir)
 {
-  DEBUGASSERT(o != NULL);
-  DEBUGASSERT(i_ab != NULL);
-  DEBUGASSERT(v_ab != NULL);
-  DEBUGASSERT(phy != NULL);
+  LIBDSP_DEBUGASSERT(o != NULL);
+  LIBDSP_DEBUGASSERT(i_ab != NULL);
+  LIBDSP_DEBUGASSERT(v_ab != NULL);
+  LIBDSP_DEBUGASSERT(phy != NULL);
 
-  FAR struct motor_observer_smo_s *smo =
-    (FAR struct motor_observer_smo_s *)o->ao;
-  FAR ab_frame_t *emf    = &smo->emf;
-  FAR ab_frame_t *emf_f  = &smo->emf_f;
-  FAR ab_frame_t *z      = &smo->z;
-  FAR ab_frame_t *i_est  = &smo->i_est;
-  FAR ab_frame_t *v_err  = &smo->v_err;
-  FAR ab_frame_t *i_err  = &smo->i_err;
-  FAR ab_frame_t *sign   = &smo->sign;
+  FAR struct motor_observer_smo_f32_s *smo =
+    (FAR struct motor_observer_smo_f32_s *)o->ao;
+  FAR ab_frame_f32_t *emf    = &smo->emf;
+  FAR ab_frame_f32_t *emf_f  = &smo->emf_f;
+  FAR ab_frame_f32_t *z      = &smo->z;
+  FAR ab_frame_f32_t *i_est  = &smo->i_est;
+  FAR ab_frame_f32_t *v_err  = &smo->v_err;
+  FAR ab_frame_f32_t *i_err  = &smo->i_err;
+  FAR ab_frame_f32_t *sign   = &smo->sign;
   float i_err_a_abs  = 0.0f;
   float i_err_b_abs  = 0.0f;
   float angle        = 0.0f;
   float filter       = 0.0f;
 
-  /* REVISIT: observer works only when IQ current is high enough */
+  /* REVISIT: observer works only when IQ current is high enough
+   * Lower IQ current -> lower K_SLIDE
+   */
 
   /* Calculate observer gains */
 
@@ -305,7 +296,7 @@ void motor_observer_smo(FAR struct motor_observer_s *o, FAR ab_frame_t *i_ab,
     {
       /* Enter linear region if error is small enough */
 
-      z->a = i_err->a * smo->k_slide / smo->err_max;
+      z->a = i_err->a * smo->k_slide * smo->one_by_err_max;
     }
   else
     {
@@ -318,7 +309,7 @@ void motor_observer_smo(FAR struct motor_observer_s *o, FAR ab_frame_t *i_ab,
     {
       /* Enter linear region if error is small enough */
 
-      z->b = i_err->b * smo->k_slide / smo->err_max;
+      z->b = i_err->b * smo->k_slide * smo->one_by_err_max;
     }
   else
     {
@@ -341,23 +332,11 @@ void motor_observer_smo(FAR struct motor_observer_s *o, FAR ab_frame_t *i_ab,
    *   emf_a = -|emf| * sin(th)
    *   emf_b =  |emf| * cos(th)
    *   th = atan2(-emf_a, emf->b)
+   *
+   * NOTE: bottleneck but we can't do much more to optimise this
    */
 
   angle = fast_atan2(-emf->a, emf->b);
-
-#if 1
-  /* Some assertions
-   * TODO: simplify
-   */
-
-  if (angle != angle) angle = 0.0f;
-  if (emf->a != emf->a) emf->a = 0.0f;
-  if (emf->b != emf->b) emf->b = 0.0f;
-  if (z->a != z->a) z->a = 0.0f;
-  if (z->b != z->b) z->b = 0.0f;
-  if (i_est->a != i_est->a) i_est->a = 0.0f;
-  if (i_est->b != i_est->b) i_est->b = 0.0f;
-#endif
 
   /* Angle compensation.
    * Due to low pass filtering we have some delay in estimated phase angle.
@@ -395,18 +374,16 @@ void motor_observer_smo(FAR struct motor_observer_s *o, FAR ab_frame_t *i_ab,
  *
  ****************************************************************************/
 
-void motor_sobserver_div_init(FAR struct motor_sobserver_div_s *so,
-                              uint8_t samples,
-                              float filter,
-                              float per)
+void motor_sobserver_div_init(FAR struct motor_sobserver_div_f32_s *so,
+                              uint8_t samples, float filter, float per)
 {
-  DEBUGASSERT(so != NULL);
-  DEBUGASSERT(samples > 0);
-  DEBUGASSERT(filter > 0.0f);
+  LIBDSP_DEBUGASSERT(so != NULL);
+  LIBDSP_DEBUGASSERT(samples > 0);
+  LIBDSP_DEBUGASSERT(filter > 0.0f);
 
   /* Reset observer data */
 
-  memset(so, 0, sizeof(struct motor_sobserver_div_s));
+  memset(so, 0, sizeof(struct motor_sobserver_div_f32_s));
 
   /* Store number of samples for DIV observer */
 
@@ -416,7 +393,7 @@ void motor_sobserver_div_init(FAR struct motor_sobserver_div_s *so,
 
   so->filter  = filter;
 
-  /*  */
+  /* Store inverted sampling period */
 
   so->one_by_dt = 1.0f / (so->samples * per);
 }
@@ -436,15 +413,15 @@ void motor_sobserver_div_init(FAR struct motor_sobserver_div_s *so,
  *
  ****************************************************************************/
 
-void motor_sobserver_div(FAR struct motor_observer_s *o,
-                          float angle, float dir)
+void motor_sobserver_div(FAR struct motor_observer_f32_s *o,
+                         float angle, float dir)
 {
-  DEBUGASSERT(o != NULL);
-  DEBUGASSERT(angle >= 0.0f && angle <= 2*M_PI_F);
-  DEBUGASSERT(dir == DIR_CW || dir == DIR_CCW);
+  LIBDSP_DEBUGASSERT(o != NULL);
+  LIBDSP_DEBUGASSERT(angle >= 0.0f && angle <= 2*M_PI_F);
+  LIBDSP_DEBUGASSERT(dir == DIR_CW || dir == DIR_CCW);
 
-  FAR struct motor_sobserver_div_s *so =
-    (FAR struct motor_sobserver_div_s *)o->so;
+  FAR struct motor_sobserver_div_f32_s *so =
+    (FAR struct motor_sobserver_div_f32_s *)o->so;
   volatile float omega = 0.0f;
 
   /* Get angle diff */
@@ -531,9 +508,9 @@ void motor_sobserver_div(FAR struct motor_observer_s *o,
  *
  ****************************************************************************/
 
-float motor_observer_speed_get(FAR struct motor_observer_s *o)
+float motor_observer_speed_get(FAR struct motor_observer_f32_s *o)
 {
-  DEBUGASSERT(o != NULL);
+  LIBDSP_DEBUGASSERT(o != NULL);
 
   return o->speed;
 }
@@ -552,9 +529,9 @@ float motor_observer_speed_get(FAR struct motor_observer_s *o)
  *
  ****************************************************************************/
 
-float motor_observer_angle_get(FAR struct motor_observer_s *o)
+float motor_observer_angle_get(FAR struct motor_observer_f32_s *o)
 {
-  DEBUGASSERT(o != NULL);
+  LIBDSP_DEBUGASSERT(o != NULL);
 
   return o->angle;
 }

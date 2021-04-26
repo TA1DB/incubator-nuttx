@@ -1,35 +1,20 @@
 /****************************************************************************
  * arch/arm/src/cxd56xx/cxd56_sfc.c
  *
- *   Copyright 2018 Sony Semiconductor Solutions Corporation
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of Sony Semiconductor Solutions Corporation nor
- *    the names of its contributors may be used to endorse or promote
- *    products derived from this software without specific prior written
- *    permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -42,16 +27,17 @@
 #include <nuttx/arch.h>
 #include <nuttx/mtd/mtd.h>
 
+#include <inttypes.h>
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>
 
 /* Prototypes for Remote API */
 
-int FM_RawWrite(uint32_t offset, const void *buf, uint32_t size);
-int FM_RawVerifyWrite(uint32_t offset, const void *buf, uint32_t size);
-int FM_RawRead(uint32_t offset, void *buf, uint32_t size);
-int FM_RawEraseSector(uint32_t sector);
+int fw_fm_rawwrite(uint32_t offset, const void *buf, uint32_t size);
+int fw_fm_rawverifywrite(uint32_t offset, const void *buf, uint32_t size);
+int fw_fm_rawread(uint32_t offset, void *buf, uint32_t size);
+int fw_fm_rawerasesector(uint32_t sector);
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -99,11 +85,10 @@ static int cxd56_erase(FAR struct mtd_dev_s *dev, off_t startblock,
 
   for (i = 0; i < nblocks; i++)
     {
-      ret = FM_RawEraseSector(startblock + i);
+      ret = fw_fm_rawerasesector(startblock + i);
       if (ret < 0)
         {
-          set_errno(-ret);
-          return ERROR;
+          return ret;
         }
     }
 
@@ -117,11 +102,11 @@ static ssize_t cxd56_bread(FAR struct mtd_dev_s *dev, off_t startblock,
 
   finfo("bread: %08lx (%u blocks)\n", startblock << PAGE_SHIFT, nblocks);
 
-  ret = FM_RawRead(startblock << PAGE_SHIFT, buffer, nblocks << PAGE_SHIFT);
+  ret = fw_fm_rawread(startblock << PAGE_SHIFT, buffer,
+                      nblocks << PAGE_SHIFT);
   if (ret < 0)
     {
-      set_errno(-ret);
-      return ERROR;
+      return ret;
     }
 
   return nblocks;
@@ -135,16 +120,15 @@ static ssize_t cxd56_bwrite(FAR struct mtd_dev_s *dev, off_t startblock,
   finfo("bwrite: %08lx (%u blocks)\n", startblock << PAGE_SHIFT, nblocks);
 
 #ifdef CONFIG_CXD56_SFC_VERIFY_WRITE
-  ret = FM_RawVerifyWrite(startblock << PAGE_SHIFT, buffer,
+  ret = fw_fm_rawverifywrite(startblock << PAGE_SHIFT, buffer,
                           nblocks << PAGE_SHIFT);
 #else
-  ret = FM_RawWrite(startblock << PAGE_SHIFT, buffer,
+  ret = fw_fm_rawwrite(startblock << PAGE_SHIFT, buffer,
                     nblocks << PAGE_SHIFT);
 #endif
   if (ret < 0)
     {
-      set_errno(-ret);
-      return ERROR;
+      return ret;
     }
 
   return nblocks;
@@ -157,11 +141,10 @@ static ssize_t cxd56_read(FAR struct mtd_dev_s *dev, off_t offset,
 
   finfo("read: %08lx (%u bytes)\n", offset, nbytes);
 
-  ret = FM_RawRead(offset, buffer, nbytes);
+  ret = fw_fm_rawread(offset, buffer, nbytes);
   if (ret < 0)
     {
-      set_errno(-ret);
-      return ERROR;
+      return ret;
     }
 
   return nbytes;
@@ -176,14 +159,13 @@ static ssize_t cxd56_write(FAR struct mtd_dev_s *dev, off_t offset,
   finfo("write: %08lx (%u bytes)\n", offset, nbytes);
 
 #ifdef CONFIG_CXD56_SFC_VERIFY_WRITE
-  ret = FM_RawVerifyWrite(offset, buffer, nbytes);
+  ret = fw_fm_rawverifywrite(offset, buffer, nbytes);
 #else
-  ret = FM_RawWrite(offset, buffer, nbytes);
+  ret = fw_fm_rawwrite(offset, buffer, nbytes);
 #endif
   if (ret < 0)
     {
-      set_errno(-ret);
-      return ERROR;
+      return ret;
     }
 
   return nbytes;
@@ -219,7 +201,8 @@ static int cxd56_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
               geo->neraseblocks = priv->density >> SECTOR_SHIFT;
               ret               = OK;
 
-              finfo("blocksize: %d erasesize: %d neraseblocks: %d\n",
+              finfo("blocksize: %" PRId32 " erasesize: %" PRId32
+                    " neraseblocks: %" PRId32 "\n",
                     geo->blocksize, geo->erasesize, geo->neraseblocks);
             }
         }
@@ -236,7 +219,7 @@ static int cxd56_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
 
           while (sec < last)
             {
-              FM_RawEraseSector(sec);
+              fw_fm_rawerasesector(sec);
               sec++;
             }
         }

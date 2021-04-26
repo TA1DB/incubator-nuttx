@@ -1,35 +1,20 @@
 /****************************************************************************
  * tools/configure.c
  *
- *   Copyright (C) 2012, 2017-2019 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -70,17 +55,18 @@
 
 #define WINDOWS_NATIVE 1
 #define WINDOWS_CYGWIN 2
-#define WINDOWS_UBUNTU 3
-#define WINDOWS_MSYS   4
+#define WINDOWS_MSYS   3
 
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
 static void show_usage(const char *progname, int exitcode);
+static void dumpcfgs(void);
 static void debug(const char *fmt, ...);
 static void parse_args(int argc, char **argv);
 static int run_make(const char *arg);
+static bool filecmp(const char *f1, const char *f2);
 static bool check_directory(const char *directory);
 static void verify_directory(const char *directory);
 static bool verify_optiondir(const char *directory);
@@ -131,6 +117,7 @@ static bool        g_winpaths      = false; /* False: POSIX style paths */
 #endif
 static bool        g_debug         = false; /* Enable debug output */
 static bool        g_enforce       = false; /* Enfore distclean */
+static bool        g_distclean     = false; /* Distclean if configured */
 
 static const char *g_appdir        = NULL;  /* Relative path to the application directory */
 static const char *g_archdir       = NULL;  /* Name of architecture subdirectory */
@@ -179,15 +166,17 @@ static const char *g_optfiles[] =
 
 static void show_usage(const char *progname, int exitcode)
 {
-  fprintf(stderr, "\nUSAGE: %s  [-d] [-e] [-b|f] [-l|m|c|u|g|n] "
+  fprintf(stderr, "\nUSAGE: %s  [-d] [-E] [-e] [-b|f] [-L] [-l|m|c|g|n] "
           "[-a <app-dir>] <board-name>:<config-name> [make-opts]\n",
           progname);
   fprintf(stderr, "\nUSAGE: %s  [-h]\n", progname);
   fprintf(stderr, "\nWhere:\n");
   fprintf(stderr, "  -d:\n");
   fprintf(stderr, "    Enables debug output\n");
-  fprintf(stderr, "  -e:\n");
+  fprintf(stderr, "  -E:\n");
   fprintf(stderr, "    Enforce distclean if already configured\n");
+  fprintf(stderr, "  -e:\n");
+  fprintf(stderr, "    Performs distclean if configuration changed\n");
   fprintf(stderr, "  -b:\n");
 #ifdef CONFIG_WINDOWS_NATIVE
   fprintf(stderr, "    Informs the tool that it should use Windows style\n");
@@ -210,16 +199,17 @@ static void show_usage(const char *progname, int exitcode)
   fprintf(stderr, "    style paths like C:\\Program Files are used.\n");
   fprintf(stderr, "    POSIX style paths are used by default.\n");
 #endif
-  fprintf(stderr, "  [-l|m|c|u|g|n]\n");
+  fprintf(stderr, "  [-l|m|c|g|n]\n");
   fprintf(stderr, "    Selects the host environment.\n");
   fprintf(stderr, "    -l Selects the Linux (l) host environment.\n");
   fprintf(stderr, "    -m Selects the macOS (m) host environment.\n");
   fprintf(stderr, "    -c Selects the Windows Cygwin (c) environment.\n");
-  fprintf(stderr, "    -u Selects the Windows Ubuntu (u) environment.\n");
   fprintf(stderr, "    -g Selects the Windows MinGW/MSYS environment.\n");
   fprintf(stderr, "    -n Selects the Windows native (n) environment.\n");
   fprintf(stderr, "  Default: Use host setup in the defconfig file.\n");
   fprintf(stderr, "  Default Windows: Cygwin.\n");
+  fprintf(stderr, "  -L:\n");
+  fprintf(stderr, "    Lists all available configurations.\n");
   fprintf(stderr, "  -a <app-dir>:\n");
   fprintf(stderr, "    Informs the configuration tool where the\n");
   fprintf(stderr, "    application build directory.  This is a relative\n");
@@ -246,6 +236,17 @@ static void show_usage(const char *progname, int exitcode)
   exit(exitcode);
 }
 
+static void dumpcfgs(void)
+{
+  find_topdir();
+  snprintf(g_buffer, BUFFER_SIZE, "%s%cboards", g_topdir, g_delim);
+  verify_directory(g_buffer);
+  g_configtop = strdup(g_buffer);
+  enumerate_configs();
+  free(g_configtop);
+  exit(EXIT_SUCCESS);
+}
+
 static void debug(const char *fmt, ...)
 {
   va_list ap;
@@ -265,7 +266,7 @@ static void parse_args(int argc, char **argv)
 
   /* Parse command line options */
 
-  while ((ch = getopt(argc, argv, "a:bcdefghlmnu")) > 0)
+  while ((ch = getopt(argc, argv, "a:bcdEefghLlmnu")) > 0)
     {
       switch (ch)
         {
@@ -287,8 +288,12 @@ static void parse_args(int argc, char **argv)
             g_debug = true;
             break;
 
-          case 'e' :
+          case 'E' :
             g_enforce = true;
+            break;
+
+          case 'e' :
+            g_distclean = true;
             break;
 
           case 'f' :
@@ -304,6 +309,9 @@ static void parse_args(int argc, char **argv)
           case 'h' :
             show_usage(argv[0], EXIT_SUCCESS);
 
+          case 'L' :
+            dumpcfgs();
+
           case 'l' :
             g_host = HOST_LINUX;
             break;
@@ -315,11 +323,6 @@ static void parse_args(int argc, char **argv)
           case 'n' :
             g_host    = HOST_WINDOWS;
             g_windows = WINDOWS_NATIVE;
-            break;
-
-          case 'u' :
-            g_host    = HOST_WINDOWS;
-            g_windows = WINDOWS_UBUNTU;
             break;
 
           case '?' :
@@ -347,30 +350,40 @@ static void parse_args(int argc, char **argv)
 
   /* The required option should be the board directory name and the
    * configuration directory name separated by ':', '/' or '\'.  Any are
-   * acceptable in this context.
+   * acceptable in this context. Or using the custom board relative or
+   * absolute path directly here.
    */
 
   g_boarddir = argv[optind];
   optind++;
 
-  ptr = strchr(g_boarddir, ':');
-  if (ptr == NULL)
+  if (!verify_optiondir(g_boarddir))
     {
-      ptr = strchr(g_boarddir, '/');
-      if (!ptr)
+      ptr = strchr(g_boarddir, ':');
+      if (ptr == NULL)
         {
-          ptr = strchr(g_boarddir, '\\');
+          ptr = strchr(g_boarddir, '/');
+          if (!ptr)
+            {
+              ptr = strchr(g_boarddir, '\\');
+            }
         }
-    }
 
-  if (ptr == NULL)
+      if (ptr == NULL)
+        {
+          fprintf(stderr, "ERROR: Invalid <board-name>:<config-name>\n");
+          show_usage(argv[0], EXIT_FAILURE);
+        }
+
+      *ptr++ = '\0';
+      g_configdir = ptr;
+    }
+  else
     {
-      fprintf(stderr, "ERROR: Invalid <board-name>:<config-name>\n");
-      show_usage(argv[0], EXIT_FAILURE);
-    }
+      /* custom board case with relative or absolute path */
 
-  *ptr++ = '\0';
-  g_configdir = ptr;
+      g_configpath = strdup(g_boarddir);
+    }
 
   /* The left arguments will pass to make */
 
@@ -380,7 +393,6 @@ static void parse_args(int argc, char **argv)
 static int run_make(const char *arg)
 {
   char **argv;
-  bool v1 = false;
 
   snprintf(g_buffer, BUFFER_SIZE, "make %s", arg);
 
@@ -388,20 +400,42 @@ static int run_make(const char *arg)
     {
       strncat(g_buffer, " ", BUFFER_SIZE - 1);
       strncat(g_buffer, *argv, BUFFER_SIZE - 1);
-      if (strcmp(*argv, "V=1") == 0)
-        {
-          v1 = true;
-        }
-    }
-
-  if (!v1)
-    {
-#ifndef WIN32
-      strncat(g_buffer, " 1>/dev/null", BUFFER_SIZE - 1);
-#endif
     }
 
   return system(g_buffer);
+}
+
+static bool filecmp(const char *f1, const char *f2)
+{
+  FILE *stream1;
+  FILE *stream2;
+  char ch1;
+  char ch2;
+
+  stream1 = fopen(f1, "r");
+  stream2 = fopen(f2, "r");
+
+  if (stream1 == NULL || stream2 == NULL)
+    {
+      return false;
+    }
+
+  do
+    {
+      ch1 = fgetc(stream1);
+      ch2 = fgetc(stream2);
+
+      if (ch1 != ch2)
+        {
+          return false;
+        }
+    }
+  while (ch1 != EOF && ch2 != EOF);
+
+  fclose(stream1);
+  fclose(stream2);
+
+  return true;
 }
 
 static bool check_directory(const char *directory)
@@ -760,47 +794,62 @@ static void enumerate_configs(void)
 
 static void check_configdir(void)
 {
-  /* Get the path to the top level configuration directory: boards/ */
-
-  snprintf(g_buffer, BUFFER_SIZE, "%s%cboards", g_topdir, g_delim);
-  debug("check_configdir: Checking configtop=%s\n", g_buffer);
-
-  verify_directory(g_buffer);
-  g_configtop = strdup(g_buffer);
-
-  /* Get and verify the path to the selected configuration:
-   * boards/<archdir>/<chipdir>/<boarddir>/configs/<configdir>
-   */
-
-  find_archname();
-
-  snprintf(g_buffer, BUFFER_SIZE, "%s%cboards%c%s%c%s%c%s%cconfigs%c%s",
-           g_topdir, g_delim, g_delim, g_archdir, g_delim, g_chipdir,
-           g_delim, g_boarddir, g_delim, g_delim, g_configdir);
-  debug("check_configdir: Checking configpath=%s\n", g_buffer);
-
-  if (!verify_optiondir(g_buffer))
+  if (verify_optiondir(g_configpath))
     {
-      fprintf(stderr, "ERROR: No configuration at %s\n", g_buffer);
-      enumerate_configs();
-      exit(EXIT_FAILURE);
+      /* Get the path to the custom board scripts directory */
+
+      snprintf(g_buffer, BUFFER_SIZE, "%s%c..%c..%cscripts",
+               g_configpath, g_delim, g_delim, g_delim);
+      if (verify_optiondir(g_buffer))
+        {
+          g_scriptspath = strdup(g_buffer);
+        }
     }
-
-  g_configpath = strdup(g_buffer);
-
-  /* Get and verify the path to the scripts directory:
-   * boards/<archdir>/<chipdir>/<boarddir>/scripts
-   */
-
-  snprintf(g_buffer, BUFFER_SIZE, "%s%cboards%c%s%c%s%c%s%cscripts",
-           g_topdir, g_delim, g_delim, g_archdir, g_delim,
-           g_chipdir, g_delim, g_boarddir, g_delim);
-  debug("check_configdir: Checking scriptspath=%s\n", g_buffer);
-
-  g_scriptspath = NULL;
-  if (verify_optiondir(g_buffer))
+  else
     {
-      g_scriptspath = strdup(g_buffer);
+      /* Get the path to the top level configuration directory: boards/ */
+
+      snprintf(g_buffer, BUFFER_SIZE, "%s%cboards", g_topdir, g_delim);
+      debug("check_configdir: Checking configtop=%s\n", g_buffer);
+
+      verify_directory(g_buffer);
+      g_configtop = strdup(g_buffer);
+
+      /* Get and verify the path to the selected configuration:
+       * boards/<archdir>/<chipdir>/<boarddir>/configs/<configdir>
+       */
+
+      find_archname();
+
+      snprintf(g_buffer, BUFFER_SIZE, "%s%cboards%c%s%c%s%c%s%cconfigs%c%s",
+               g_topdir, g_delim, g_delim, g_archdir, g_delim, g_chipdir,
+               g_delim, g_boarddir, g_delim, g_delim, g_configdir);
+      debug("check_configdir: Checking configpath=%s\n", g_buffer);
+
+      if (!verify_optiondir(g_buffer))
+        {
+          fprintf(stderr, "ERROR: No configuration at %s\n", g_buffer);
+          fprintf(stderr, "Run tools/configure -L"
+                          " to list available configurations.\n");
+          exit(EXIT_FAILURE);
+        }
+
+      g_configpath = strdup(g_buffer);
+
+      /* Get and verify the path to the scripts directory:
+       * boards/<archdir>/<chipdir>/<boarddir>/scripts
+       */
+
+      snprintf(g_buffer, BUFFER_SIZE, "%s%cboards%c%s%c%s%c%s%cscripts",
+               g_topdir, g_delim, g_delim, g_archdir, g_delim,
+               g_chipdir, g_delim, g_boarddir, g_delim);
+      debug("check_configdir: Checking scriptspath=%s\n", g_buffer);
+
+      g_scriptspath = NULL;
+      if (verify_optiondir(g_buffer))
+        {
+          g_scriptspath = strdup(g_buffer);
+        }
     }
 }
 
@@ -812,18 +861,46 @@ static void check_configured(void)
 
   snprintf(g_buffer, BUFFER_SIZE, "%s%c.config", g_topdir, g_delim);
   debug("check_configured: Checking %s\n", g_buffer);
-  if (verify_file(g_buffer))
+
+  if (!verify_file(g_buffer))
     {
-      if (g_enforce)
+      return;
+    }
+
+  if (g_enforce)
+    {
+      run_make("distclean");
+    }
+  else
+    {
+      char *defcfgpath = NULL;
+
+      snprintf(g_buffer, BUFFER_SIZE, "%s%cdefconfig",
+               g_configpath, g_delim);
+      defcfgpath = strdup(g_buffer);
+
+      snprintf(g_buffer, BUFFER_SIZE, "%s%cdefconfig",
+               g_topdir, g_delim);
+
+      if (filecmp(g_buffer, defcfgpath))
         {
-          run_make("distclean");
+          fprintf(stderr, "No configuration change.\n");
+          free(defcfgpath);
+          exit(EXIT_SUCCESS);
         }
       else
         {
-          fprintf(stderr, "ERROR: Found %s... Already configured\n",
-                  g_buffer);
-          fprintf(stderr, "       Please 'make distclean' and try again\n");
-          exit(EXIT_FAILURE);
+          free(defcfgpath);
+          if (g_distclean)
+            {
+              run_make("distclean");
+            }
+          else
+            {
+              fprintf(stderr, "Already configured!\n");
+              fprintf(stderr, "Please 'make distclean' and try again.\n");
+              exit(EXIT_FAILURE);
+            }
         }
     }
 }
@@ -1015,7 +1092,8 @@ static void check_configuration(void)
     {
       fprintf(stderr, "ERROR: No configuration in %s\n", g_configpath);
       fprintf(stderr, "       No defconfig file found.\n");
-      enumerate_configs();
+      fprintf(stderr, "Run tools/configure -L"
+                      " to list available configurations.\n");
       exit(EXIT_FAILURE);
     }
 
@@ -1040,14 +1118,16 @@ static void check_configuration(void)
                       g_configpath);
               fprintf(stderr, "       No Make.defs file in %s\n",
                       g_scriptspath);
-              enumerate_configs();
+              fprintf(stderr, "Run tools/configure -L"
+                              " to list available configurations.\n");
               exit(EXIT_FAILURE);
             }
         }
       else
         {
           fprintf(stderr, "ERROR: No Make.defs file in %s\n", g_configpath);
-          enumerate_configs();
+          fprintf(stderr, "Run tools/configure -L"
+                          " to list available configurations.\n");
           exit(EXIT_FAILURE);
         }
     }
@@ -1275,7 +1355,6 @@ static void set_host(const char *destconfig)
 
           disable_feature(destconfig, "CONFIG_WINDOWS_NATIVE");
           disable_feature(destconfig, "CONFIG_WINDOWS_CYGWIN");
-          disable_feature(destconfig, "CONFIG_WINDOWS_UBUNTU");
           disable_feature(destconfig, "CONFIG_WINDOWS_MSYS");
           disable_feature(destconfig, "CONFIG_WINDOWS_OTHER");
 
@@ -1294,7 +1373,6 @@ static void set_host(const char *destconfig)
 
           disable_feature(destconfig, "CONFIG_WINDOWS_NATIVE");
           disable_feature(destconfig, "CONFIG_WINDOWS_CYGWIN");
-          disable_feature(destconfig, "CONFIG_WINDOWS_UBUNTU");
           disable_feature(destconfig, "CONFIG_WINDOWS_MSYS");
           disable_feature(destconfig, "CONFIG_WINDOWS_OTHER");
 
@@ -1320,7 +1398,6 @@ static void set_host(const char *destconfig)
                 printf("  Select Windows/Cygwin host\n");
                 enable_feature(destconfig, "CONFIG_WINDOWS_CYGWIN");
                 disable_feature(destconfig, "CONFIG_WINDOWS_MSYS");
-                disable_feature(destconfig, "CONFIG_WINDOWS_UBUNTU");
                 disable_feature(destconfig, "CONFIG_WINDOWS_NATIVE");
                 break;
 
@@ -1328,15 +1405,6 @@ static void set_host(const char *destconfig)
                 printf("  Select Windows/MSYS host\n");
                 disable_feature(destconfig, "CONFIG_WINDOWS_CYGWIN");
                 enable_feature(destconfig, "CONFIG_WINDOWS_MSYS");
-                disable_feature(destconfig, "CONFIG_WINDOWS_UBUNTU");
-                disable_feature(destconfig, "CONFIG_WINDOWS_NATIVE");
-                break;
-
-              case WINDOWS_UBUNTU:
-                printf("  Select Ubuntu for Windows 10 host\n");
-                disable_feature(destconfig, "CONFIG_WINDOWS_CYGWIN");
-                disable_feature(destconfig, "CONFIG_WINDOWS_MSYS");
-                enable_feature(destconfig, "CONFIG_WINDOWS_UBUNTU");
                 disable_feature(destconfig, "CONFIG_WINDOWS_NATIVE");
                 break;
 
@@ -1344,7 +1412,6 @@ static void set_host(const char *destconfig)
                 printf("  Select Windows native host\n");
                 disable_feature(destconfig, "CONFIG_WINDOWS_CYGWIN");
                 disable_feature(destconfig, "CONFIG_WINDOWS_MSYS");
-                disable_feature(destconfig, "CONFIG_WINDOWS_UBUNTU");
                 enable_feature(destconfig, "CONFIG_WINDOWS_NATIVE");
                 break;
 
@@ -1372,6 +1439,11 @@ static void set_host(const char *destconfig)
 static void configure(void)
 {
   char *destconfig;
+
+  /* Copy the defconfig to toplevel */
+
+  snprintf(g_buffer, BUFFER_SIZE, "%s%cdefconfig", g_topdir, g_delim);
+  copy_file(g_srcdefconfig, g_buffer, 0644);
 
   /* Copy the defconfig file as .config */
 
@@ -1414,13 +1486,17 @@ static void configure(void)
 
           if (g_winpaths)
             {
-              /* Using Windows paths, but the configuration wants POSIX paths */
+              /* Using Windows paths, but the configuration wants POSIX
+               * paths.
+               */
 
               substitute(appdir, '\\', '/');
             }
           else
             {
-              /* Using POSIX paths, but the configuration wants Windows paths */
+              /* Using POSIX paths, but the configuration wants Windows
+               * paths.
+               */
 
               substitute(appdir, '/', '\\');
             }
@@ -1495,7 +1571,7 @@ int main(int argc, char **argv, char **envp)
   debug("main: Checking arguments\n");
   parse_args(argc, argv);
 
-  debug("main: Checking Nuttx Directories\n");
+  debug("main: Checking NuttX Directories\n");
   find_topdir();
   check_configdir();
   check_configured();

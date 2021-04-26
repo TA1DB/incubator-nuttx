@@ -1,5 +1,5 @@
 ############################################################################
-# boards/arm/cxd56xx/drivers/video/Make.defs
+# boards/arm/cxd56xx/drivers/camera/Make.defs
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -24,4 +24,4 @@ endif
 
 DEPPATH += --dep-path platform$(DELIM)camera
 VPATH += :platform$(DELIM)camera
-CFLAGS += $(shell $(INCDIR) $(INCDIROPT) "$(CC)" $(TOPDIR)$(DELIM)drivers$(DELIM)platform$(DELIM)camera)
+CFLAGS += $(shell $(INCDIR) "$(CC)" $(TOPDIR)$(DELIM)drivers$(DELIM)platform$(DELIM)camera)

@@ -1,5 +1,5 @@
 /****************************************************************************
- * boards/x86_64/intel64/qemu/scripts/qemu.ld
+ * boards/x86_64/intel64/qemu-intel64/scripts/qemu.ld
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -22,12 +22,20 @@ OUTPUT_ARCH(i386:x86-64)
 ENTRY(__pmode_entry)
 SECTIONS
 {
-    . = 0x4M;
+
+    . = 0x0;
+
+    .realmode : {
+        . = ALIGN(8);
+        KEEP(*(.multiboot))
+        *(.realmode)
+    }
+
+    . = 0x1M;
     _kernel_physical_start = .;
 
     .loader.text : {
         . = ALIGN(8);
-        KEEP(*(.multiboot))
         *(.loader.text)
     }
 

@@ -1,5 +1,5 @@
 /****************************************************************************
- *  boards/arm/sama5/sama5d2-xult/src/sam_bringup.c
+ * boards/arm/sama5/sama5d2-xult/src/sam_bringup.c
  *
  *  Licensed to the Apache Software Foundation (ASF) under one or more
  *  contributor license agreements.  See the NOTICE file distributed with
@@ -25,14 +25,19 @@
 #include <nuttx/config.h>
 
 #include <sys/mount.h>
+#include <stdlib.h>
 #include <syslog.h>
 #include <debug.h>
+#include <string.h>
 
+#include <nuttx/fs/fs.h>
 #include <nuttx/irq.h>
 #include <nuttx/kthread.h>
 #include <nuttx/usb/usbdev.h>
 #include <nuttx/usb/usbhost.h>
 #include <nuttx/usb/usbdev_trace.h>
+
+#include "sama5d2-xult.h"
 
 #ifdef CONFIG_CDCACM
 #  include <nuttx/usb/cdcacm.h>
@@ -51,7 +56,10 @@
 #  include <nuttx/usb/rndis.h>
 #endif
 
-#include "sama5d2-xult.h"
+#ifdef CONFIG_MMCSD
+#  include <nuttx/mmcsd.h>
+#  include "sam_sdmmc.h"
+#endif
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -125,6 +133,102 @@ static void sam_i2ctool(void)
 #endif
 
 /****************************************************************************
+ * Name: nsh_sdmmc_initialize
+ *
+ * Description:
+ *   Initialize SDMMC drivers
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_SAMA5_SDMMC
+
+static int nsh_sdmmc_initialize(void)
+{
+  struct sdio_dev_s *sdmmc0;
+  struct sdio_dev_s *sdmmc1;
+  int ret = 0;
+
+  /* Get an instance of the SDIO interface */
+
+#ifdef CONFIG_SAMA5_SDMMC0
+  sdmmc0 = sam_sdmmc_sdio_initialize(SDMMC0_SLOTNO);
+  if (!sdmmc0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize SD/MMC\n");
+    }
+  else
+    {
+      /* Bind the SDIO interface to the MMC/SD driver */
+
+      ret = mmcsd_slotinitialize(SDMMC0_MINOR, sdmmc0);
+      if (ret != OK)
+        {
+          syslog(LOG_ERR,
+                 "ERROR: Failed to bind SDIO to the MMC/SD driver (slot 0): "
+                 "%d\n",
+                 ret);
+        }
+    }
+
+#ifdef CONFIG_SAMA5D27_SDMMC0_MOUNT
+  /* Mount the volume on SDMMC0 */
+
+  ret = nx_mount(CONFIG_SAMA5D27_SDMMC0_MOUNT_BLKDEV,
+                 CONFIG_SAMA5D27_SDMMC0_MOUNT_MOUNTPOINT,
+                 CONFIG_SAMA5D27_SDMMC0_MOUNT_FSTYPE,
+                 0, NULL);
+
+  if (ret < 0)
+    {
+      _err("ERROR: Failed to mount %s: %d\n",
+           CONFIG_SAMA5D27_SDMMC0_MOUNT_MOUNTPOINT, ret);
+    }
+#endif
+#endif
+
+#ifdef CONFIG_SAMA5_SDMMC1
+  sdmmc1 = sam_sdmmc_sdio_initialize(SDMMC1_SLOTNO);
+  if (!sdmmc1)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize SD/MMC\n");
+    }
+  else
+    {
+      /* Bind the SDIO interface to the MMC/SD driver */
+
+      ret = mmcsd_slotinitialize(SDMMC1_MINOR, sdmmc1);
+      if (ret != OK)
+        {
+          syslog(LOG_ERR,
+                 "ERROR: Failed to bind SDIO to the MMC/SD driver (slot 0): "
+                 "%d\n",
+                 ret);
+        }
+    }
+
+#ifdef CONFIG_SAMA5D27_SDMMC1_MOUNT
+  /* Mount the volume on SDMMC1 */
+
+  ret = nx_mount(CONFIG_SAMA5D27_SDMMC1_MOUNT_BLKDEV,
+                 CONFIG_SAMA5D27_SDMMC1_MOUNT_MOUNTPOINT,
+                 CONFIG_SAMA5D27_SDMMC1_MOUNT_FSTYPE,
+                 0, NULL);
+
+  if (ret < 0)
+    {
+      _err("ERROR: Failed to mount %s: %d\n",
+           CONFIG_SAMA5D27_SDMMC1_MOUNT_MOUNTPOINT, ret);
+    }
+#endif
+#endif
+
+  return OK;
+}
+#else
+#  define nsh_sdmmc_initialize() (OK)
+#endif
+
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -143,6 +247,14 @@ int sam_bringup(void)
   /* Register I2C drivers on behalf of the I2C tool */
 
   sam_i2ctool();
+
+#ifdef HAVE_SDMMC
+#ifdef CONFIG_SAMA5_SDMMC
+  /* Initialize SDMCC-based MMC/SD card support */
+
+  nsh_sdmmc_initialize();
+#endif
+#endif
 
 #ifdef HAVE_HSMCI
 #ifdef CONFIG_SAMA5_HSMCI0
@@ -164,15 +276,15 @@ int sam_bringup(void)
 
       /* Mount the volume on HSMCI0 */
 
-      ret = mount(CONFIG_SAMA5D4EK_HSMCI0_MOUNT_BLKDEV,
-                  CONFIG_SAMA5D4EK_HSMCI0_MOUNT_MOUNTPOINT,
-                  CONFIG_SAMA5D4EK_HSMCI0_MOUNT_FSTYPE,
-                  0, NULL);
+      ret = nx_mount(CONFIG_SAMA5D4EK_HSMCI0_MOUNT_BLKDEV,
+                     CONFIG_SAMA5D4EK_HSMCI0_MOUNT_MOUNTPOINT,
+                     CONFIG_SAMA5D4EK_HSMCI0_MOUNT_FSTYPE,
+                     0, NULL);
 
       if (ret < 0)
         {
           _err("ERROR: Failed to mount %s: %d\n",
-               CONFIG_SAMA5D4EK_HSMCI0_MOUNT_MOUNTPOINT, errno);
+               CONFIG_SAMA5D4EK_HSMCI0_MOUNT_MOUNTPOINT, ret);
         }
     }
 #endif
@@ -191,19 +303,19 @@ int sam_bringup(void)
 #ifdef CONFIG_SAMA5D4EK_HSMCI1_MOUNT
   else
     {
-      /* REVISIT:  A delay seems to be required here or the mount will fail. */
+      /* REVISIT: A delay seems required here or the mount will fail. */
 
       /* Mount the volume on HSMCI1 */
 
-      ret = mount(CONFIG_SAMA5D4EK_HSMCI1_MOUNT_BLKDEV,
-                  CONFIG_SAMA5D4EK_HSMCI1_MOUNT_MOUNTPOINT,
-                  CONFIG_SAMA5D4EK_HSMCI1_MOUNT_FSTYPE,
-                  0, NULL);
+      ret = nx_mount(CONFIG_SAMA5D4EK_HSMCI1_MOUNT_BLKDEV,
+                     CONFIG_SAMA5D4EK_HSMCI1_MOUNT_MOUNTPOINT,
+                     CONFIG_SAMA5D4EK_HSMCI1_MOUNT_FSTYPE,
+                     0, NULL);
 
       if (ret < 0)
         {
           _err("ERROR: Failed to mount %s: %d\n",
-               CONFIG_SAMA5D4EK_HSMCI1_MOUNT_MOUNTPOINT, errno);
+               CONFIG_SAMA5D4EK_HSMCI1_MOUNT_MOUNTPOINT, ret);
         }
     }
 #endif
@@ -230,14 +342,14 @@ int sam_bringup(void)
     {
       /* Mount the file system */
 
-      ret = mount(CONFIG_SAMA5D4EK_ROMFS_ROMDISK_DEVNAME,
-                  CONFIG_SAMA5D4EK_ROMFS_MOUNT_MOUNTPOINT,
-                  "romfs", MS_RDONLY, NULL);
+      ret = nx_mount(CONFIG_SAMA5D4EK_ROMFS_ROMDISK_DEVNAME,
+                     CONFIG_SAMA5D4EK_ROMFS_MOUNT_MOUNTPOINT,
+                     "romfs", MS_RDONLY, NULL);
       if (ret < 0)
         {
-          _err("ERROR: mount(%s,%s,romfs) failed: %d\n",
+          _err("ERROR: nx_mount(%s,%s,romfs) failed: %d\n",
                CONFIG_SAMA5D4EK_ROMFS_ROMDISK_DEVNAME,
-               CONFIG_SAMA5D4EK_ROMFS_MOUNT_MOUNTPOINT, errno);
+               CONFIG_SAMA5D4EK_ROMFS_MOUNT_MOUNTPOINT, ret);
         }
     }
 #endif
@@ -317,7 +429,7 @@ int sam_bringup(void)
 #ifdef CONFIG_FS_PROCFS
   /* Mount the procfs file system */
 
-  ret = mount(NULL, SAMA5_PROCFS_MOUNTPOINT, "procfs", 0, NULL);
+  ret = nx_mount(NULL, SAMA5_PROCFS_MOUNTPOINT, "procfs", 0, NULL);
   if (ret < 0)
     {
       _err("ERROR: Failed to mount procfs at %s: %d\n",

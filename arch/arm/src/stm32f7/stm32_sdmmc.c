@@ -1,37 +1,20 @@
 /****************************************************************************
  * arch/arm/src/stm32f7/stm32_sdmmc.c
  *
- *   Copyright (C) 2009, 2011-2018,2019 Gregory Nutt. All rights reserved.
- *   Authors: Gregory Nutt <gnutt@nuttx.org>
- *            David Sidrane <david.sidrane @nscdg.com>
- *            Bob Feretich <bob.feretich@rafresearch.com>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -41,6 +24,7 @@
 
 #include <nuttx/config.h>
 
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -60,7 +44,7 @@
 #include <arch/board/board.h>
 
 #include "chip.h"
-#include "up_arch.h"
+#include "arm_arch.h"
 
 #include "stm32_dtcm.h"
 #include "stm32_dma.h"
@@ -397,7 +381,7 @@ struct stm32_dev_s
   sdio_eventset_t    waitevents;      /* Set of events to be waited for */
   uint32_t           waitmask;        /* Interrupt enables for event waiting */
   volatile sdio_eventset_t wkupevent; /* The event that caused the wakeup */
-  WDOG_ID            waitwdog;        /* Watchdog that handles event timeouts */
+  struct wdog_s      waitwdog;        /* Watchdog that handles event timeouts */
 
   /* Callback support */
 
@@ -509,7 +493,7 @@ static void stm32_dataconfig(struct stm32_dev_s *priv, uint32_t timeout,
 static void stm32_datadisable(struct stm32_dev_s *priv);
 static void stm32_sendfifo(struct stm32_dev_s *priv);
 static void stm32_recvfifo(struct stm32_dev_s *priv);
-static void stm32_eventtimeout(int argc, uint32_t arg, ...);
+static void stm32_eventtimeout(wdparm_t arg);
 static void stm32_endwait(struct stm32_dev_s *priv,
               sdio_eventset_t wkupevent);
 static void stm32_endtransfer(struct stm32_dev_s *priv,
@@ -549,7 +533,7 @@ static void stm32_blocksetup(FAR struct sdio_dev_s *dev,
 static int  stm32_recvsetup(FAR struct sdio_dev_s *dev, FAR uint8_t *buffer,
               size_t nbytes);
 static int  stm32_sendsetup(FAR struct sdio_dev_s *dev,
-              FAR const uint8_t *buffer, uint32_t nbytes);
+              FAR const uint8_t *buffer, size_t nbytes);
 static int  stm32_cancel(FAR struct sdio_dev_s *dev);
 
 static int  stm32_waitresponse(FAR struct sdio_dev_s *dev, uint32_t cmd);
@@ -563,9 +547,8 @@ static int  stm32_recvshort(FAR struct sdio_dev_s *dev, uint32_t cmd,
 /* EVENT handler */
 
 static void stm32_waitenable(FAR struct sdio_dev_s *dev,
-              sdio_eventset_t eventset);
-static sdio_eventset_t
-            stm32_eventwait(FAR struct sdio_dev_s *dev, uint32_t timeout);
+              sdio_eventset_t eventset, uint32_t timeout);
+static sdio_eventset_t stm32_eventwait(FAR struct sdio_dev_s *dev);
 static void stm32_callbackenable(FAR struct sdio_dev_s *dev,
               sdio_eventset_t eventset);
 static int  stm32_registercallback(FAR struct sdio_dev_s *dev,
@@ -582,10 +565,6 @@ static int  stm32_dmarecvsetup(FAR struct sdio_dev_s *dev,
               FAR uint8_t *buffer, size_t buflen);
 static int  stm32_dmasendsetup(FAR struct sdio_dev_s *dev,
               FAR const uint8_t *buffer, size_t buflen);
-#ifdef CONFIG_ARCH_HAVE_SDIO_DELAYED_INVLDT
-static int  stm32_dmadelydinvldt(FAR struct sdio_dev_s *dev,
-              FAR const uint8_t *buffer, size_t buflen);
-#endif
 #endif /* CONFIG_STM32F7_SDMMC_DMA */
 
 /* Initialization/uninitialization/reset ************************************/
@@ -635,9 +614,6 @@ struct stm32_dev_s g_sdmmcdev1 =
 #endif
     .dmarecvsetup     = stm32_dmarecvsetup,
     .dmasendsetup     = stm32_dmasendsetup,
-#ifdef CONFIG_ARCH_HAVE_SDIO_DELAYED_INVLDT
-    .dmadelydinvldt   = stm32_dmadelydinvldt,
-#endif
 #else
 #ifdef CONFIG_ARCH_HAVE_SDIO_PREFLIGHT
     .dmapreflight     = NULL,
@@ -704,9 +680,6 @@ struct stm32_dev_s g_sdmmcdev2 =
 #endif
     .dmarecvsetup     = stm32_dmarecvsetup,
     .dmasendsetup     = stm32_dmasendsetup,
-#ifdef CONFIG_ARCH_HAVE_SDIO_DELAYED_INVLDT
-    .dmadelydinvldt   = stm32_dmadelydinvldt,
-#endif
 #endif
   },
   .base              = STM32_SDMMC2_BASE,
@@ -836,7 +809,7 @@ static inline void stm32_setclkcr(struct stm32_dev_s *priv, uint32_t clkcr)
   regval |=  clkcr;
   sdmmc_putreg32(priv, regval, STM32_SDMMC_CLKCR_OFFSET);
 
-  mcinfo("CLKCR: %08x PWR: %08x\n",
+  mcinfo("CLKCR: %08" PRIx32 "PWR: %08" PRIx32 "\n",
         sdmmc_getreg32(priv, STM32_SDMMC_CLKCR_OFFSET),
         sdmmc_getreg32(priv, STM32_SDMMC_POWER_OFFSET));
 }
@@ -1440,9 +1413,7 @@ static void stm32_recvfifo(struct stm32_dev_s *priv)
  *   any other waited-for event occurring.
  *
  * Input Parameters:
- *   argc   - The number of arguments (should be 1)
- *   arg    - The argument (the SDMMC private state structure reference cast
- *            to uint32_t)
+ *   arg    - The argument
  *
  * Returned Value:
  *   None
@@ -1452,7 +1423,7 @@ static void stm32_recvfifo(struct stm32_dev_s *priv)
  *
  ****************************************************************************/
 
-static void stm32_eventtimeout(int argc, uint32_t arg, ...)
+static void stm32_eventtimeout(wdparm_t arg)
 {
   struct stm32_dev_s *priv = (struct stm32_dev_s *)arg;
 
@@ -1495,7 +1466,7 @@ static void stm32_endwait(struct stm32_dev_s *priv,
 {
   /* Cancel the watchdog timeout */
 
-  wd_cancel(priv->waitwdog);
+  wd_cancel(&priv->waitwdog);
 
   /* Disable event-related interrupts */
 
@@ -1601,7 +1572,14 @@ static void stm32_endtransfer(struct stm32_dev_s *priv,
 static int stm32_sdmmc_rdyinterrupt(int irq, void *context, void *arg)
 {
   struct stm32_dev_s *priv = (struct stm32_dev_s *)arg;
-  stm32_endwait(priv, SDIOWAIT_WRCOMPLETE);
+
+  /* Avoid noise, check the state */
+
+  if (stm32_gpioread(priv->d0_gpio))
+    {
+      stm32_endwait(priv, SDIOWAIT_WRCOMPLETE);
+    }
+
   return OK;
 }
 #endif
@@ -1918,7 +1896,7 @@ static void stm32_reset(FAR struct sdio_dev_s *dev)
                                * completion events */
 #endif
 
-  wd_cancel(priv->waitwdog); /* Cancel any timeouts */
+  wd_cancel(&priv->waitwdog); /* Cancel any timeouts */
 
   /* Interrupt mode data transfer support */
 
@@ -1942,7 +1920,7 @@ static void stm32_reset(FAR struct sdio_dev_s *dev)
   stm32_setpwrctrl(priv, STM32_SDMMC_POWER_PWRCTRL_ON);
   leave_critical_section(flags);
 
-  mcinfo("CLCKR: %08x POWER: %08x\n",
+  mcinfo("CLCKR: %08" PRIx32 " POWER: %08" PRIx32 "\n",
         sdmmc_getreg32(priv, STM32_SDMMC_CLKCR_OFFSET),
         sdmmc_getreg32(priv, STM32_SDMMC_POWER_OFFSET));
 }
@@ -2190,7 +2168,8 @@ static int stm32_sendcmd(FAR struct sdio_dev_s *dev, uint32_t cmd,
   cmdidx  = (cmd & MMCSD_CMDIDX_MASK) >> MMCSD_CMDIDX_SHIFT;
   regval |= cmdidx | STM32_SDMMC_CMD_CPSMEN;
 
-  mcinfo("cmd: %08x arg: %08x regval: %08x\n", cmd, arg, regval);
+  mcinfo("cmd: %08" PRIx32 " arg: %08" PRIx32
+         " regval: %08" PRIx32 "\n", cmd, arg, regval);
 
   /* Write the SDIO CMD */
 
@@ -2375,7 +2354,7 @@ static int stm32_cancel(FAR struct sdio_dev_s *dev)
 
   /* Cancel any watchdog timeout */
 
-  wd_cancel(priv->waitwdog);
+  wd_cancel(&priv->waitwdog);
 
   /* If this was a DMA transfer, make sure that DMA is stopped */
 
@@ -2451,8 +2430,9 @@ static int stm32_waitresponse(FAR struct sdio_dev_s *dev, uint32_t cmd)
     {
       if (--timeout <= 0)
         {
-           mcerr("ERROR: Timeout cmd: %08x events: %08x STA: %08x\n",
-               cmd, events, sdmmc_getreg32(priv, STM32_SDMMC_STA_OFFSET));
+           mcerr("ERROR: Timeout cmd: %08" PRIx32
+                 " events: %08" PRIx32 " STA: %08" PRIx32 "\n",
+                 cmd, events, sdmmc_getreg32(priv, STM32_SDMMC_STA_OFFSET));
 
           return -ETIMEDOUT;
         }
@@ -2541,12 +2521,12 @@ static int stm32_recvshortcrc(FAR struct sdio_dev_s *dev, uint32_t cmd,
       regval = sdmmc_getreg32(priv, STM32_SDMMC_STA_OFFSET);
       if ((regval & STM32_SDMMC_STA_CTIMEOUT) != 0)
         {
-          mcerr("ERROR: Command timeout: %08x\n", regval);
+          mcerr("ERROR: Command timeout: %08" PRIx32 "\n", regval);
           ret = -ETIMEDOUT;
         }
       else if ((regval & STM32_SDMMC_STA_CCRCFAIL) != 0)
         {
-          mcerr("ERROR: CRC failure: %08x\n", regval);
+          mcerr("ERROR: CRC failure: %08" PRIx32 "\n", regval);
           ret = -EIO;
         }
 #ifdef CONFIG_DEBUG_FEATURES
@@ -2607,12 +2587,12 @@ static int stm32_recvlong(FAR struct sdio_dev_s *dev, uint32_t cmd,
       regval = sdmmc_getreg32(priv, STM32_SDMMC_STA_OFFSET);
       if (regval & STM32_SDMMC_STA_CTIMEOUT)
         {
-          mcerr("ERROR: Timeout STA: %08x\n", regval);
+          mcerr("ERROR: Timeout STA: %08" PRIx32 "\n", regval);
           ret = -ETIMEDOUT;
         }
       else if (regval & STM32_SDMMC_STA_CCRCFAIL)
         {
-          mcerr("ERROR: CRC fail STA: %08x\n", regval);
+          mcerr("ERROR: CRC fail STA: %08" PRIx32 "\n", regval);
           ret = -EIO;
         }
     }
@@ -2655,7 +2635,7 @@ static int stm32_recvshort(FAR struct sdio_dev_s *dev, uint32_t cmd,
       (cmd & MMCSD_RESPONSE_MASK) != MMCSD_R4_RESPONSE &&
       (cmd & MMCSD_RESPONSE_MASK) != MMCSD_R7_RESPONSE)
     {
-      mcerr("ERROR: Wrong response CMD=%08x\n", cmd);
+      mcerr("ERROR: Wrong response CMD=%08" PRIx32 "\n", cmd);
       ret = -EINVAL;
     }
   else
@@ -2668,7 +2648,7 @@ static int stm32_recvshort(FAR struct sdio_dev_s *dev, uint32_t cmd,
       regval = sdmmc_getreg32(priv, STM32_SDMMC_STA_OFFSET);
       if (regval & STM32_SDMMC_STA_CTIMEOUT)
         {
-          mcerr("ERROR: Timeout STA: %08x\n", regval);
+          mcerr("ERROR: Timeout STA: %08" PRIx32 "\n", regval);
           ret = -ETIMEDOUT;
         }
     }
@@ -2708,7 +2688,7 @@ static int stm32_recvshort(FAR struct sdio_dev_s *dev, uint32_t cmd,
  ****************************************************************************/
 
 static void stm32_waitenable(FAR struct sdio_dev_s *dev,
-                             sdio_eventset_t eventset)
+                             sdio_eventset_t eventset, uint32_t timeout)
 {
   struct stm32_dev_s *priv = (struct stm32_dev_s *)dev;
   uint32_t waitmask;
@@ -2753,6 +2733,34 @@ static void stm32_waitenable(FAR struct sdio_dev_s *dev,
     }
 
   stm32_configwaitints(priv, waitmask, eventset, 0);
+
+  /* Check if the timeout event is specified in the event set */
+
+  if ((priv->waitevents & SDIOWAIT_TIMEOUT) != 0)
+    {
+      int delay;
+      int ret;
+
+      /* Yes.. Handle a cornercase: The user request a timeout event but
+       * with timeout == 0?
+       */
+
+      if (!timeout)
+        {
+          priv->wkupevent = SDIOWAIT_TIMEOUT;
+          return;
+        }
+
+      /* Start the watchdog timer */
+
+      delay = MSEC2TICK(timeout);
+      ret   = wd_start(&priv->waitwdog, delay,
+                       stm32_eventtimeout, (wdparm_t)priv);
+      if (ret < 0)
+        {
+          mcerr("ERROR: wd_start failed: %d\n", ret);
+        }
+    }
 }
 
 /****************************************************************************
@@ -2776,8 +2784,7 @@ static void stm32_waitenable(FAR struct sdio_dev_s *dev,
  *
  ****************************************************************************/
 
-static sdio_eventset_t stm32_eventwait(FAR struct sdio_dev_s *dev,
-                                       uint32_t timeout)
+static sdio_eventset_t stm32_eventwait(FAR struct sdio_dev_s *dev)
 {
   struct stm32_dev_s *priv = (struct stm32_dev_s *)dev;
   sdio_eventset_t wkupevent = 0;
@@ -2805,35 +2812,6 @@ static sdio_eventset_t stm32_eventwait(FAR struct sdio_dev_s *dev,
 #else
   DEBUGASSERT(priv->waitevents != 0 || priv->wkupevent != 0);
 #endif
-
-  /* Check if the timeout event is specified in the event set */
-
-  if ((priv->waitevents & SDIOWAIT_TIMEOUT) != 0)
-    {
-      int delay;
-
-      /* Yes.. Handle a cornercase: The user request a timeout event but
-       * with timeout == 0?
-       */
-
-      if (!timeout)
-        {
-          /* Then just tell the caller that we already timed out */
-
-          wkupevent = SDIOWAIT_TIMEOUT;
-          goto errout;
-        }
-
-      /* Start the watchdog timer */
-
-      delay = MSEC2TICK(timeout);
-      ret   = wd_start(priv->waitwdog, delay, stm32_eventtimeout,
-                       1, (uint32_t)priv);
-      if (ret < 0)
-        {
-          mcerr("ERROR: wd_start failed: %d\n", ret);
-        }
-    }
 
 #if defined(CONFIG_MMCSD_SDIOWAIT_WRCOMPLETE)
   if ((priv->waitevents & SDIOWAIT_WRCOMPLETE) != 0)
@@ -2870,7 +2848,7 @@ static sdio_eventset_t stm32_eventwait(FAR struct sdio_dev_s *dev,
            * return an SDIO error.
            */
 
-          wd_cancel(priv->waitwdog);
+          wd_cancel(&priv->waitwdog);
           wkupevent = SDIOWAIT_ERROR;
           goto errout_with_waitints;
         }
@@ -2899,7 +2877,6 @@ errout_with_waitints:
   priv->xfrflags   = 0;
 #endif
 
-errout:
   leave_critical_section(flags);
   stm32_dumpsamples(priv);
   return wkupevent;
@@ -3101,9 +3078,7 @@ static int stm32_dmarecvsetup(FAR struct sdio_dev_s *dev,
   if ((uintptr_t)buffer < DTCM_START ||
       (uintptr_t)buffer + buflen > DTCM_END)
     {
-#if !defined(CONFIG_ARCH_HAVE_SDIO_DELAYED_INVLDT)
       up_invalidate_dcache((uintptr_t)buffer, (uintptr_t)buffer + buflen);
-#endif
     }
 
   /* Start the DMA */
@@ -3176,11 +3151,7 @@ static int stm32_dmasendsetup(FAR struct sdio_dev_s *dev,
   if ((uintptr_t)buffer < DTCM_START ||
       (uintptr_t)buffer + buflen > DTCM_END)
     {
-#ifdef CONFIG_ARMV7M_DCACHE_WRITETHROUGH
-      up_invalidate_dcache((uintptr_t)buffer, (uintptr_t)buffer + buflen);
-#else
-      up_flush_dcache((uintptr_t)buffer, (uintptr_t)buffer + buflen);
-#endif
+      up_clean_dcache((uintptr_t)buffer, (uintptr_t)buffer + buflen);
     }
 
   /* Save the source buffer information for use by the interrupt handler */
@@ -3214,44 +3185,6 @@ static int stm32_dmasendsetup(FAR struct sdio_dev_s *dev,
   /* Enable TX interrupts */
 
   stm32_configxfrints(priv, STM32_SDMMC_DMASEND_MASK);
-
-  return OK;
-}
-#endif
-
-/****************************************************************************
- * Name: stm32_dmadelydinvldt
- *
- * Description:
- *   Delayed D-cache invalidation.
- *   This function should be called after receive DMA completion to perform
- *   D-cache invalidation. This eliminates the need for cache aligned DMA
- *   buffers when the D-cache is in store-through mode.
- *
- * Input Parameters:
- *   dev    - An instance of the SDIO device interface
- *   buffer - The memory to DMA into
- *   buflen - The size of the DMA transfer in bytes
- *
- * Returned Value:
- *   OK on success; a negated errno on failure
- *
- ****************************************************************************/
-
-#if defined(CONFIG_ARCH_HAVE_SDIO_DELAYED_INVLDT) && \
-    defined(CONFIG_STM32F7_SDMMC_DMA)
-
-static int stm32_dmadelydinvldt(FAR struct sdio_dev_s *dev,
-                              FAR const uint8_t *buffer, size_t buflen)
-{
-  /* Invaliate cache to physical memory when not in DTCM memory. */
-
-  if ((uintptr_t)buffer < DTCM_START ||
-      (uintptr_t)buffer + buflen > DTCM_END)
-    {
-      up_invalidate_dcache((uintptr_t)buffer,
-                           (uintptr_t)buffer + buflen);
-    }
 
   return OK;
 }
@@ -3473,12 +3406,7 @@ FAR struct sdio_dev_s *sdio_initialize(int slotno)
    * priority inheritance enabled.
    */
 
-  nxsem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
-
-  /* Create a watchdog timer */
-
-  priv->waitwdog = wd_create();
-  DEBUGASSERT(priv->waitwdog);
+  nxsem_set_protocol(&priv->waitsem, SEM_PRIO_NONE);
 
 #ifdef CONFIG_STM32F7_SDMMC_DMA
   /* Allocate a DMA channel */

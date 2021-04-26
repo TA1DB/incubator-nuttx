@@ -1,6 +1,5 @@
 /****************************************************************************
  * drivers/power/bq769x0.c
- * Lower half driver for BQ769x0 battery monitor
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -18,6 +17,8 @@
  * under the License.
  *
  ****************************************************************************/
+
+/* Lower half driver for BQ769x0 battery monitor */
 
 /* The bq76920/bq76930/bq76940 battery monitor ICs provide voltage, current,
  * and temperature monitoring of up to 15-series cells.  These ICs also
@@ -65,10 +66,7 @@
 /* Helpers ******************************************************************/
 
 #ifndef MIN
-#  define MIN(a,b) (a < b ? a : b)
-#endif
-#ifndef MAX
-#  define MAX(a,b) (a > b ? a : b)
+#  define MIN(a,b) ((a) < (b) ? (a) : (b))
 #endif
 
 /* The CRC function expects to see address bytes as they appear on the wire */
@@ -83,15 +81,9 @@
 #  define batreg    _err
 #  define batinfo   _info
 #else
-#  ifdef CONFIG_CPP_HAVE_VARARGS
-#    define baterr(x...)
-#    define batreg(x...)
-#    define batinfo(x...)
-#  else
-#    define baterr(void)
-#    define batreg(void)
-#    define batinfo(void)
-#  endif
+#  define baterr    _none
+#  define batreg    _none
+#  define batinfo   _none
 #endif
 
 /****************************************************************************
@@ -103,7 +95,7 @@ struct bq769x0_dev_s
   /* The common part of the battery driver visible to the upper-half driver */
 
   FAR const struct battery_monitor_operations_s *ops; /* Battery operations */
-  sem_t batsem;                /* Enforce mutually exclusive access */
+  sem_t batsem;                                       /* Enforce mutually exclusive access */
 
   /* Data fields specific to the lower half BQ769x0 driver follow */
 
@@ -255,26 +247,25 @@ static int bq769x0_getnreg16(FAR struct bq769x0_dev_s *priv, uint8_t regaddr,
 
 /* Device functions */
 
-static inline int bq769x0_getreport(FAR struct bq769x0_dev_s *priv,
-                                    FAR uint8_t *report);
-static inline int bq769x0_getvolt(FAR struct bq769x0_dev_s *priv,
-                                  FAR int *volts);
-static inline int bq769x0_getcurrent(FAR struct bq769x0_dev_s *priv,
-                                     FAR struct battery_monitor_current_s *current);
-static inline int bq769x0_getcellvolt(FAR struct bq769x0_dev_s *priv,
-                                      FAR struct battery_monitor_voltage_s *voltages);
-static inline int bq769x0_gettemperature(FAR struct bq769x0_dev_s *priv,
-                                         FAR struct battery_monitor_temperature_s *temps);
-static inline int bq769x0_setbalance(FAR struct bq769x0_dev_s *priv,
-                                     FAR struct battery_monitor_balance_s *bal);
-static inline int bq769x0_doshutdown(FAR struct bq769x0_dev_s *priv);
-static inline int bq769x0_setlimits(FAR struct bq769x0_dev_s *priv,
-                                    FAR struct battery_monitor_limits_s *limits);
-static inline int bq769x0_setchgdsg(FAR struct bq769x0_dev_s *priv,
-                                    FAR struct battery_monitor_switches_s *sw);
-static inline int bq769x0_clear_chipfaults(FAR struct bq769x0_dev_s *priv,
-                                           uint8_t faults);
-static inline int bq769x0_updategain(FAR struct bq769x0_dev_s *priv);
+static int bq769x0_getreport(FAR struct bq769x0_dev_s *priv,
+                             FAR uint8_t *report);
+static int bq769x0_getvolt(FAR struct bq769x0_dev_s *priv, FAR int *volts);
+static int bq769x0_getcurrent(FAR struct bq769x0_dev_s *priv,
+                              FAR struct battery_monitor_current_s *current);
+static int bq769x0_getcellvolt(FAR struct bq769x0_dev_s *priv,
+                             FAR struct battery_monitor_voltage_s *voltages);
+static int bq769x0_gettemperature(FAR struct bq769x0_dev_s *priv,
+                            FAR struct battery_monitor_temperature_s *temps);
+static int bq769x0_setbalance(FAR struct bq769x0_dev_s *priv,
+                              FAR struct battery_monitor_balance_s *bal);
+static int bq769x0_doshutdown(FAR struct bq769x0_dev_s *priv);
+static int bq769x0_setlimits(FAR struct bq769x0_dev_s *priv,
+                             FAR struct battery_monitor_limits_s *limits);
+static int bq769x0_setchgdsg(FAR struct bq769x0_dev_s *priv,
+                             FAR struct battery_monitor_switches_s *sw);
+static int bq769x0_clear_chipfaults(FAR struct bq769x0_dev_s *priv,
+                                    uint8_t faults);
+static int bq769x0_updategain(FAR struct bq769x0_dev_s *priv);
 static int bq769x0_chip_cellcount(FAR struct bq769x0_dev_s *priv);
 
 /* Battery driver lower half methods */
@@ -368,7 +359,7 @@ static int bq769x0_getreg8(FAR struct bq769x0_dev_s *priv, uint8_t regaddr,
       return ret;
     }
 
-  /* Our expected data length varies depending on whether or not a CRC is used */
+  /* Our expected data length varies depending on whetherCRC is used */
 
   if (priv->crc)
     {
@@ -441,7 +432,7 @@ static int bq769x0_putreg8(FAR struct bq769x0_dev_s *priv, uint8_t regaddr,
   buffer[0] = regaddr;
   buffer[1] = regval;
 
-  /* Our expected data length varies depending on whether or not a CRC is used */
+  /* Our expected data length varies depending on whether CRC is used */
 
   if (priv->crc)
     {
@@ -540,7 +531,7 @@ static int bq769x0_getnreg16(FAR struct bq769x0_dev_s *priv, uint8_t regaddr,
 
   byte_count = 2 * count;
 
-  /* Our expected I2C data length varies depending on whether or not a CRC is used */
+  /* Our expected I2C data length varies depending on whether CRC is used */
 
   if (priv->crc)
     {
@@ -584,7 +575,7 @@ static int bq769x0_getnreg16(FAR struct bq769x0_dev_s *priv, uint8_t regaddr,
           crc = 0;
         }
 
-      /* Copy 16-bit values to be returned, skipping CRC bytes*/
+      /* Copy 16-bit values to be returned, skipping CRC bytes */
 
       for (i = 0; i < datalen; i += 4)
         {
@@ -614,8 +605,8 @@ static int bq769x0_getnreg16(FAR struct bq769x0_dev_s *priv, uint8_t regaddr,
  *
  ****************************************************************************/
 
-static inline int bq769x0_getreport(FAR struct bq769x0_dev_s *priv,
-                                    uint8_t *report)
+static int bq769x0_getreport(FAR struct bq769x0_dev_s *priv,
+                             FAR uint8_t *report)
 {
   uint8_t regval = 0;
   int ret;
@@ -638,7 +629,7 @@ static inline int bq769x0_getreport(FAR struct bq769x0_dev_s *priv,
  *
  ****************************************************************************/
 
-static inline int bq769x0_updategain(FAR struct bq769x0_dev_s *priv)
+static int bq769x0_updategain(FAR struct bq769x0_dev_s *priv)
 {
   int ret;
   uint8_t gainreg1;
@@ -696,7 +687,7 @@ static inline int bq769x0_updategain(FAR struct bq769x0_dev_s *priv)
  *
  ****************************************************************************/
 
-static inline int bq769x0_doshutdown(FAR struct bq769x0_dev_s *priv)
+static int bq769x0_doshutdown(FAR struct bq769x0_dev_s *priv)
 {
   int ret;
   uint8_t regval;
@@ -763,8 +754,8 @@ static inline int bq769x0_doshutdown(FAR struct bq769x0_dev_s *priv)
  *
  ****************************************************************************/
 
-static inline int bq769x0_setlimits(FAR struct bq769x0_dev_s *priv,
-                                    struct battery_monitor_limits_s *limits)
+static int bq769x0_setlimits(FAR struct bq769x0_dev_s *priv,
+                             FAR struct battery_monitor_limits_s *limits)
 {
   int ret;
   int i;
@@ -1203,8 +1194,8 @@ static inline int bq769x0_setlimits(FAR struct bq769x0_dev_s *priv,
  *
  ****************************************************************************/
 
-static inline int bq769x0_setchgdsg(FAR struct bq769x0_dev_s *priv,
-                                    struct battery_monitor_switches_s *sw)
+static int bq769x0_setchgdsg(FAR struct bq769x0_dev_s *priv,
+                             FAR struct battery_monitor_switches_s *sw)
 {
   int ret;
   uint8_t regval;
@@ -1257,8 +1248,8 @@ static inline int bq769x0_setchgdsg(FAR struct bq769x0_dev_s *priv,
  *
  ****************************************************************************/
 
-static inline int bq769x0_clear_chipfaults(FAR struct bq769x0_dev_s *priv,
-                                            uint8_t faults)
+static int bq769x0_clear_chipfaults(FAR struct bq769x0_dev_s *priv,
+                                    uint8_t faults)
 {
   int ret;
 
@@ -1395,7 +1386,7 @@ static int bq769x0_online(struct battery_monitor_dev_s *dev, bool *status)
  *
  ****************************************************************************/
 
-static inline int bq769x0_getvolt(FAR struct bq769x0_dev_s *priv, int *volts)
+static int bq769x0_getvolt(FAR struct bq769x0_dev_s *priv, int *volts)
 {
   uint16_t regval;
   int ret;
@@ -1429,8 +1420,8 @@ static inline int bq769x0_getvolt(FAR struct bq769x0_dev_s *priv, int *volts)
  *
  ****************************************************************************/
 
-static inline int bq769x0_getcellvolt(FAR struct bq769x0_dev_s *priv,
-                                      struct battery_monitor_voltage_s *voltages)
+static int bq769x0_getcellvolt(FAR struct bq769x0_dev_s *priv,
+                              FAR struct battery_monitor_voltage_s *voltages)
 {
   uint16_t regvals[BQ769X0_MAX_CELLS];
   int ret;
@@ -1487,8 +1478,8 @@ static inline int bq769x0_getcellvolt(FAR struct bq769x0_dev_s *priv,
  *
  ****************************************************************************/
 
-static inline int bq769x0_gettemperature(FAR struct bq769x0_dev_s *priv,
-                                         struct battery_monitor_temperature_s *temps)
+static int bq769x0_gettemperature(FAR struct bq769x0_dev_s *priv,
+                             FAR struct battery_monitor_temperature_s *temps)
 {
   int chip_sensors;
   int ret;
@@ -1572,8 +1563,8 @@ static int bq769x0_chip_cellcount(FAR struct bq769x0_dev_s *priv)
  *
  ****************************************************************************/
 
-static inline int bq769x0_getcurrent(FAR struct bq769x0_dev_s *priv,
-                                     FAR struct battery_monitor_current_s *current)
+static int bq769x0_getcurrent(FAR struct bq769x0_dev_s *priv,
+                              FAR struct battery_monitor_current_s *current)
 {
   /* The BQ769X0's "coulomb counter" reports average current over a 250ms
    * period. This can be integrated by the user application to measure
@@ -1647,7 +1638,7 @@ static inline int bq769x0_getcurrent(FAR struct bq769x0_dev_s *priv,
 
       /* Sample is not complete, wait and try again */
 
-      usleep(BQ769X0_CC_POLL_INTERVAL * USEC_PER_MSEC);
+      nxsig_usleep(BQ769X0_CC_POLL_INTERVAL * USEC_PER_MSEC);
     }
 
   /* CC value didn't become available in the expected amount of time */
@@ -1663,8 +1654,8 @@ static inline int bq769x0_getcurrent(FAR struct bq769x0_dev_s *priv,
  *
  ****************************************************************************/
 
-static inline int bq769x0_setbalance(FAR struct bq769x0_dev_s *priv,
-                                         struct battery_monitor_balance_s *bal)
+static int bq769x0_setbalance(FAR struct bq769x0_dev_s *priv,
+                              FAR struct battery_monitor_balance_s *bal)
 {
   int i;
   int j;
@@ -1726,7 +1717,7 @@ static inline int bq769x0_setbalance(FAR struct bq769x0_dev_s *priv,
         }
     }
 
-  /* Now split the result into 3 groups of 5 and send*/
+  /* Now split the result into 3 groups of 5 and send */
 
   for (i = 0; i < BQ769X0_BAL_REG_COUNT; i += 1)
     {
@@ -1922,7 +1913,7 @@ static int bq769x0_shutdown(struct battery_monitor_dev_s *dev,
   ret =  bq769x0_doshutdown(priv);
   if (ret < 0)
     {
-      baterr("ERROR: Error putting BQ769X0 into low-power state! Error = %d\n",
+      baterr("ERROR: putting BQ769X0 into low-power state! Error = %d\n",
              ret);
       return ret;
     }
@@ -2065,7 +2056,7 @@ static int bq769x0_operate(struct battery_monitor_dev_s *dev,
  *
  *   CONFIG_BATTERY_MONITOR - Upper half battery driver support
  *   CONFIG_I2C - I2C support
- *   CONFIG_I2C_BQ769X0 - And the driver must be explictly selected.
+ *   CONFIG_I2C_BQ769X0 - And the driver must be explicitly selected.
  *
  * Input Parameters:
  *   i2c       - An instance of the I2C interface to use to communicate with
@@ -2100,7 +2091,7 @@ FAR struct battery_monitor_dev_s *
 
   /* Initialize the BQ769x0 device structure */
 
-  priv = (FAR struct bq769x0_dev_s *)kmm_zalloc(sizeof(struct bq769x0_dev_s));
+  priv = kmm_zalloc(sizeof(struct bq769x0_dev_s));
   if (priv)
     {
       /* Initialize the BQ769x0 device structure */

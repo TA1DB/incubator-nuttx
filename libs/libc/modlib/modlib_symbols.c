@@ -24,6 +24,8 @@
 
 #include <nuttx/config.h>
 
+#include <inttypes.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -172,15 +174,9 @@ static int modlib_symcallback(FAR struct module_s *modp, FAR void *arg)
 
   /* Check if this module exports a symbol of that name */
 
-#ifdef CONFIG_SYMTAB_ORDEREDBYNAME
-  exportinfo->symbol = symtab_findorderedbyname(modp->modinfo.exports,
-                                                exportinfo->name,
-                                                modp->modinfo.nexports);
-#else
   exportinfo->symbol = symtab_findbyname(modp->modinfo.exports,
                                          exportinfo->name,
                                          modp->modinfo.nexports);
-#endif
 
   if (exportinfo->symbol != NULL)
     {
@@ -366,7 +362,7 @@ int modlib_symvalue(FAR struct module_s *modp,
                                       (FAR void *)&exportinfo);
         if (ret < 0)
           {
-            berr("ERROR: modlib_symcallback failed: \n", ret);
+            berr("ERROR: modlib_symcallback failed: %d\n", ret);
             return ret;
           }
 
@@ -379,13 +375,8 @@ int modlib_symvalue(FAR struct module_s *modp,
         if (symbol == NULL)
           {
             modlib_getsymtab(&symbol, &nsymbols);
-#ifdef CONFIG_SYMTAB_ORDEREDBYNAME
-            symbol = symtab_findorderedbyname(symbol, exportinfo.name,
-                                              nsymbols);
-#else
             symbol = symtab_findbyname(symbol, exportinfo.name,
                                        nsymbols);
-#endif
           }
 
         /* Was the symbol found from any exporter? */
@@ -401,9 +392,11 @@ int modlib_symvalue(FAR struct module_s *modp,
          * entry
          */
 
-        binfo("SHN_UNDEF: name=%s %08x+%08x=%08x\n",
-              loadinfo->iobuffer, sym->st_value, symbol->sym_value,
-              sym->st_value + symbol->sym_value);
+        binfo("SHN_UNDEF: name=%s "
+              "%08" PRIxPTR "+%08" PRIxPTR "=%08" PRIxPTR "\n",
+              loadinfo->iobuffer,
+              (uintptr_t)sym->st_value, (uintptr_t)symbol->sym_value,
+              (uintptr_t)(sym->st_value + symbol->sym_value));
 
         sym->st_value += ((uintptr_t)symbol->sym_value);
       }
@@ -413,8 +406,9 @@ int modlib_symvalue(FAR struct module_s *modp,
       {
         secbase = loadinfo->shdr[sym->st_shndx].sh_addr;
 
-        binfo("Other: %08x+%08x=%08x\n",
-              sym->st_value, secbase, sym->st_value + secbase);
+        binfo("Other: %08" PRIxPTR "+%08" PRIxPTR "=%08" PRIxPTR "\n",
+              (uintptr_t)sym->st_value, secbase,
+              (uintptr_t)(sym->st_value + secbase));
 
         sym->st_value += secbase;
       }

@@ -395,7 +395,7 @@ Toolchains
   mips-elf toolchain:
 
     CONFIG_MIPS32_TOOLCHAIN_PINGUINOW - Pinguino mips-elf toolchain for Windows
-    CONFIG_MIPS32_TOOLCHAIN_GNU_ELF   - mips-elf toolchain for Linux or OS X
+    CONFIG_MIPS32_TOOLCHAIN_GNU_ELF   - mips-elf toolchain for Linux or macOS
 
   And set the path appropriately in the PATH environment variable.  These tool
   configurations are untested -- expect some additional integration issues.
@@ -439,7 +439,7 @@ Toolchains
      but you might easily find some new path problems.  If so, check out 'cygpath -w'
 
   2. Windows toolchains cannot follow Cygwin symbolic links.  Many symbolic links
-     are used in Nuttx (e.g., include/arch).  The make system works around these
+     are used in NuttX (e.g., include/arch).  The make system works around these
      problems for the Windows tools by copying directories instead of linking them.
      But this can also cause some confusion for you:  For example, you may edit
      a file in a "linked" directory and find that your changes had no effect.
@@ -627,7 +627,7 @@ Analog Input
   and ADC driver that can be used with standard open, close, read, and write
   interfaces.  To complete this driver, the following is needed:
 
-  (1) arch/mips/src/pic32mx/pic32mx-adc.c.  The ADC driver that implements
+  (1) arch/mips/src/pic32mx/pic32mx_adc.c.  The ADC driver that implements
       the ADC interfaces defined in include/nuttx/analog/adc.h and must
       be built when CONFIG_PIC32MX_ADC is defined.
 

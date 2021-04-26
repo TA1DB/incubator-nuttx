@@ -1,35 +1,20 @@
 /****************************************************************************
  * drivers/sensors/ak09912.c
  *
- *   Copyright 2018 Sony Semiconductor Solutions Corporation
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name of Sony Semiconductor Solutions Corporation nor
- *    the names of its contributors may be used to endorse or promote
- *    products derived from this software without specific prior written
- *    permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -84,8 +69,8 @@
 #define AK09912_ASAX        0x60
 
 /* REGISTER: CNTL1
- * Enable or disable temparator measure or enable or disable Noise suppression
- * filter.
+ * Enable or disable temparator measure or enable or disable Noise
+ * suppression filter.
  */
 
 #define AK09912_CTRL1       0x30
@@ -165,7 +150,7 @@ struct ak09912_dev_s
   struct sensi_data_s asa_data; /* sensitivity data */
   uint8_t mode;                 /* power mode */
   uint8_t nsf;                  /* noise suppression filter setting */
-  WDOG_ID wd;
+  struct wdog_s wd;
   sem_t wait;
 };
 
@@ -398,9 +383,9 @@ static int ak09912_set_noise_suppr_flt(FAR struct ak09912_dev_s *priv,
  *
  ****************************************************************************/
 
-static void ak09912_wd_timeout(int argc, uint32_t arg, ...)
+static void ak09912_wd_timeout(wdparm_t arg)
 {
-  struct ak09912_dev_s *priv = (struct ak09912_dev_s *) arg;
+  struct ak09912_dev_s *priv = (struct ak09912_dev_s *)arg;
   irqstate_t flags = enter_critical_section();
   nxsem_post(&priv->wait);
   leave_critical_section(flags);
@@ -421,15 +406,15 @@ static int ak09912_read_mag_uncomp_data(FAR struct ak09912_dev_s *priv,
   uint8_t state = 0;
   uint8_t buffer[8];  /* TMPS and ST2 is read, but the value is omitted. */
 
-  wd_start(priv->wd, AK09912_POLLING_TIMEOUT, ak09912_wd_timeout,
-           1, (uint32_t)priv);
+  wd_start(&priv->wd, AK09912_POLLING_TIMEOUT,
+           ak09912_wd_timeout, (wdparm_t)priv);
   state = ak09912_getreg8(priv, AK09912_ST1);
   while (! (state & 0x1))
     {
       nxsem_wait(&priv->wait);
     }
 
-  wd_cancel(priv->wd);
+  wd_cancel(&priv->wd);
   ret = ak09912_getreg(priv,  AK09912_HXL,  buffer, sizeof(buffer));
 
   mag_data->x = MERGE_BYTE(buffer[0], buffer[1]);
@@ -676,7 +661,7 @@ int ak09912_register(FAR const char *devpath, FAR struct i2c_master_s *i2c)
 
   /* Initialize the AK09912 device structure */
 
-  priv = (FAR struct ak09912_dev_s *)kmm_malloc(sizeof(struct ak09912_dev_s));
+  priv = kmm_zalloc(sizeof(struct ak09912_dev_s));
   if (!priv)
     {
       snerr("Failed to allocate instance\n");
@@ -687,7 +672,6 @@ int ak09912_register(FAR const char *devpath, FAR struct i2c_master_s *i2c)
   priv->addr = AK09912_ADDR;
   priv->freq = AK09912_FREQ;
   priv->compensated = ENABLE_COMPENSATED;
-  priv->wd = wd_create();
   nxsem_init(&priv->wait, 0, 0);
 
   /* set default noise suppression filter. */

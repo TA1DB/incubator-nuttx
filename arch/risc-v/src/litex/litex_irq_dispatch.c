@@ -32,8 +32,8 @@
 #include <nuttx/board.h>
 #include <arch/board/board.h>
 
-#include "up_arch.h"
-#include "up_internal.h"
+#include "riscv_arch.h"
+#include "riscv_internal.h"
 
 #include "litex.h"
 
@@ -93,7 +93,7 @@ void *litex_dispatch_irq(uint32_t vector, uint32_t *regs)
 
   /* Acknowledge the interrupt */
 
-  up_ack_irq(irq);
+  riscv_ack_irq(irq);
 
 #ifdef CONFIG_SUPPRESS_INTERRUPTS
   PANIC();

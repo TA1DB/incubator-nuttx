@@ -1,37 +1,20 @@
 /****************************************************************************
  * drivers/audio/vs1053.c
  *
- * Audio device driver for VLSI Solutions VS1053 Audio codec.
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- *   Copyright (C) 2013 Ken Pettit. All rights reserved.
- *   Author: Ken Pettit <pettitkd@gmail.com>
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -44,6 +27,7 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
 
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -60,7 +44,6 @@
 #include <nuttx/fs/ioctl.h>
 #include <nuttx/audio/audio.h>
 #include <nuttx/audio/vs1053.h>
-#include <nuttx/lib/math.h>
 
 #include "vs1053.h"
 
@@ -119,7 +102,7 @@ struct vs1053_struct_s
   struct dq_queue_s       apbq;              /* Our queue for enqueued buffers */
   unsigned long           spi_freq;          /* Frequency to run the SPI bus at. */
   unsigned long           chip_freq;         /* Current chip frequency */
-  mqd_t                   mq;                /* Message queue for receiving messages */
+  struct file             mq;                /* Message queue for receiving messages */
   char                    mqname[16];        /* Our message queue name */
   pthread_t               threadid;          /* ID of our thread */
   sem_t                   apbq_sem;          /* Audio Pipeline Buffer Queue sem access */
@@ -1275,8 +1258,8 @@ static int vs1053_dreq_isr(int irq, FAR void *context, FAR void *arg)
   if (dev->running)
     {
       msg.msg_id = AUDIO_MSG_DATA_REQUEST;
-      nxmq_send(dev->mq, (FAR const char *)&msg, sizeof(msg),
-                CONFIG_VS1053_MSG_PRIO);
+      file_mq_send(&dev->mq, (FAR const char *)&msg, sizeof(msg),
+                   CONFIG_VS1053_MSG_PRIO);
     }
   else
     {
@@ -1340,7 +1323,7 @@ static void *vs1053_workerthread(pthread_addr_t pvarg)
 
       /* Wait for messages from our message queue */
 
-      size = nxmq_receive(dev->mq, (FAR char *)&msg, sizeof(msg), &prio);
+      size = file_mq_receive(&dev->mq, (FAR char *)&msg, sizeof(msg), &prio);
 
       /* Handle the case when we return with no message */
 
@@ -1425,9 +1408,8 @@ static void *vs1053_workerthread(pthread_addr_t pvarg)
 
   /* Close the message queue */
 
-  mq_close(dev->mq);
-  mq_unlink(dev->mqname);
-  dev->mq = NULL;
+  file_mq_close(&dev->mq);
+  file_mq_unlink(dev->mqname);
 
   /* Send an AUDIO_MSG_COMPLETE message to the client */
 
@@ -1486,18 +1468,20 @@ static int vs1053_start(FAR struct audio_lowerhalf_s *lower)
 
   /* Create a message queue for the worker thread */
 
-  snprintf(dev->mqname, sizeof(dev->mqname), "/tmp/%X", dev);
+  snprintf(dev->mqname, sizeof(dev->mqname), "/tmp/%" PRIXPTR,
+           (uintptr_t)dev);
   attr.mq_maxmsg = 16;
   attr.mq_msgsize = sizeof(struct audio_msg_s);
   attr.mq_curmsgs = 0;
   attr.mq_flags = 0;
-  dev->mq = mq_open(dev->mqname, O_RDWR | O_CREAT, 0644, &attr);
-  if (dev->mq == NULL)
+  ret = file_mq_open(&dev->mq, dev->mqname,
+                     O_RDWR | O_CREAT, 0644, &attr);
+  if (ret < 0)
     {
       /* Error creating message queue! */
 
       auderr("ERROR: Couldn't allocate message queue\n");
-      return -ENOMEM;
+      return ret;
     }
 
   /* Pop the first enqueued buffer */
@@ -1534,7 +1518,7 @@ static int vs1053_start(FAR struct audio_lowerhalf_s *lower)
       (pthread_addr_t) dev);
   if (ret != OK)
     {
-      auderr("ERROR: Can't create worker thread, errno=%d\n", errno);
+      auderr("ERROR: Can't create worker thread, ret=%d\n", ret);
     }
   else
     {
@@ -1569,8 +1553,8 @@ static int vs1053_stop(FAR struct audio_lowerhalf_s *lower)
 
   term_msg.msg_id = AUDIO_MSG_STOP;
   term_msg.u.data = 0;
-  nxmq_send(dev->mq, (FAR const char *)&term_msg, sizeof(term_msg),
-            CONFIG_VS1053_MSG_PRIO);
+  file_mq_send(&dev->mq, (FAR const char *)&term_msg, sizeof(term_msg),
+               CONFIG_VS1053_MSG_PRIO);
 
   /* Join the worker thread */
 
@@ -1681,12 +1665,12 @@ static int vs1053_enqueuebuffer(FAR struct audio_lowerhalf_s *lower,
 
       /* Send a message indicating a new buffer enqueued */
 
-      if (dev->mq != NULL)
+      if (dev->mq.f_inode != NULL)
         {
           term_msg.msg_id = AUDIO_MSG_ENQUEUE;
           term_msg.u.data = 0;
-          nxmq_send(dev->mq, (FAR const char *)&term_msg,
-                    sizeof(term_msg), CONFIG_VS1053_MSG_PRIO);
+          file_mq_send(&dev->mq, (FAR const char *)&term_msg,
+                       sizeof(term_msg), CONFIG_VS1053_MSG_PRIO);
         }
     }
 
@@ -1716,6 +1700,7 @@ static int vs1053_cancelbuffer(FAR struct audio_lowerhalf_s *lower,
 static int vs1053_ioctl(FAR struct audio_lowerhalf_s *lower, int cmd,
                   unsigned long arg)
 {
+  int ret = OK;
 #ifdef CONFIG_AUDIO_DRIVER_SPECIFIC_BUFFERS
   FAR struct ap_buffer_info_s *bufinfo;
 #endif
@@ -1744,10 +1729,11 @@ static int vs1053_ioctl(FAR struct audio_lowerhalf_s *lower, int cmd,
 #endif
 
       default:
+        ret = -ENOTTY;
         break;
     }
 
-  return OK;
+  return ret;
 }
 
 /****************************************************************************
@@ -1871,21 +1857,15 @@ struct audio_lowerhalf_s *vs1053_initialize(FAR struct spi_dev_s *spi,
 
   /* Allocate a VS1053 device structure */
 
-  dev = (struct vs1053_struct_s *)kmm_malloc(sizeof(struct vs1053_struct_s));
+  dev = (struct vs1053_struct_s *)kmm_zalloc(sizeof(struct vs1053_struct_s));
   if (dev)
     {
       /* Initialize the VS1053 device structure */
 
       dev->lower.ops   = &g_audioops;
-      dev->lower.upper = NULL;
-      dev->lower.priv  = NULL;
       dev->hw_lower    = lower;
       dev->spi_freq    = CONFIG_VS1053_XTALI / 7;
       dev->spi         = spi;
-      dev->mq          = NULL;
-      dev->busy        = false;
-      dev->threadid    = 0;
-      dev->running     = false;
 
 #ifndef CONFIG_AUDIO_EXCLUDE_VOLUME
       dev->volume      = 250;           /* 25% volume as default */
@@ -1894,10 +1874,6 @@ struct audio_lowerhalf_s *vs1053_initialize(FAR struct spi_dev_s *spi,
 #endif
 #endif
 
-#ifndef CONFIG_AUDIO_EXCLUDE_TONE
-      dev->bass        = 0;
-      dev->treble      = 0;
-#endif
       nxsem_init(&dev->apbq_sem, 0, 1);
       dq_init(&dev->apbq);
 

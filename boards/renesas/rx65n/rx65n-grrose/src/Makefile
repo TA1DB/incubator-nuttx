@@ -1,5 +1,5 @@
 ############################################################################
-# configs/rx65n-grrose/src/Makefile
+# boards/renesas/rx65n/rx65n-grrose/src/Makefile
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -18,50 +18,8 @@
 #
 ############################################################################
 
--include $(TOPDIR)/Make.defs
+include $(TOPDIR)/Make.defs
 
-ARCH_SRCDIR = $(TOPDIR)/arch/$(CONFIG_ARCH)/src
-CFLAGS += -I=$(ARCH_SRCDIR)/chip -I=$(ARCH_SRCDIR)/common -I=$(TOPDIR)/sched
-CFLAGS += -I=$(ARCH_SRCDIR)/chip
+CSRCS = rx65n_appinit.c rx65n_bringup.c rx65n_sbram.c rx65n_gpio.c
 
-ASRCS =
-AOBJS = $(ASRCS:.asm=$(OBJEXT))
-CSRCS = rx65n_appinit.c rx65n_bringup.c rx65n_sbram.c
-COBJS = $(CSRCS:.c=$(OBJEXT))
-
-SRCS = $(ASRCS) $(CSRCS)
-OBJS = $(AOBJS) $(COBJS)
-
-CFLAGS += -I=$(TOPDIR)/arch/$(CONFIG_ARCH)/src
-CFLAGS += -I=$(TOPDIR)/arch/$(CONFIG_ARCH)/include
-
-all: libboard$(LIBEXT)
-
-$(AOBJS): %$(OBJEXT): %$(ASMEXT)
-	$(call ASSEMBLE, $<, $@)
-
-$(COBJS) $(LINKOBJS): %$(OBJEXT): %.c
-	$(call COMPILE, $<, $@)
-
-libboard$(LIBEXT): $(OBJS)
-	$(call ARCHIVE, $@, $(OBJS))
-
-.depend: Makefile $(SRCS)
-	$(Q) $(MKDEP) $(CC) -- $(CFLAGS) -- $(SRCS) >Make.dep
-	$(Q) touch $@
-
-depend: .depend
-
-clean:
-	$(call DELFILE, libboard$(LIBEXT))
-	$(call CLEAN)
-
-distclean: clean
-	$(call DELFILE, Make.dep)
-	$(call DELFILE, .depend)
-
-ifneq ($(BOARD_CONTEXT),y)
-context:
-endif
-
--include Make.dep
+include $(TOPDIR)/boards/Board.mk

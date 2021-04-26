@@ -4,11 +4,6 @@
  *   Copyright (C) 2013-2014, 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
- * References:
- *
- *   SAMA5D3 Series Data Sheet
- *   Atmel NoOS sample code.
- *
  * The Atmel sample code has a BSD compatible license that requires this
  * copyright notice:
  *
@@ -43,6 +38,12 @@
  *
  ****************************************************************************/
 
+/* References:
+ *
+ *   SAMA5D3 Series Data Sheet
+ *   Atmel NoOS sample code.
+ */
+
 /****************************************************************************
  * Included Files
  ****************************************************************************/
@@ -61,7 +62,7 @@
 #include <nuttx/semaphore.h>
 #include <arch/board/board.h>
 
-#include "up_arch.h"
+#include "arm_arch.h"
 #include "sam_periphclks.h"
 #include "hardware/sam_pinmap.h"
 #include "hardware/sam_pmc.h"
@@ -424,7 +425,9 @@ static struct sam_tc_s g_tc345;
 static struct sam_tc_s g_tc678;
 #endif
 
-/* TC frequency data.  This table provides the frequency for each selection of TCCLK */
+/* TC frequency data.
+ * This table provides the frequency for each selection of TCCLK
+ */
 
 #define TC_NDIVIDERS   4
 #define TC_NDIVOPTIONS 5
